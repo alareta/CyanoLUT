@@ -1,0 +1,1609 @@
+<!--
+  Cianotipia · Calibración — cuña escalonada y curva de corrección
+  © 2026 Alberto Areta — Licenciado bajo MIT (ver archivo LICENSE del repositorio).
+  Repositorio: https://github.com/[PENDIENTE]
+  Un único archivo HTML autónomo, sin dependencias de servidor
+  (salvo jsPDF vía CDN, solo para exportar el PDF de impresión).
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calibración cianotipia · Cuña escalonada + análisis</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+        integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk"
+        crossorigin="anonymous"></script>
+<style>
+  :root{
+    --prussia:#1c3f6e;       /* azul de prusia profundo */
+    --prussia-deep:#0f2747;
+    --prussia-mid:#3a6298;
+    --paper:#ece6d6;          /* papel acuarela crudo */
+    --paper-edge:#ddd4bd;
+    --ink:#15202e;
+    --ink-soft:#46566b;
+    --line:#c7bca2;
+    --accent:#b8702e;         /* anaranjado óxido férrico, complementario al azul */
+    --accent-soft:#d9a877;
+    --ok:#2f6b46;
+    --warn:#9a4524;
+    --mono:"SFMono-Regular",ui-monospace,"Menlo","Consolas",monospace;
+    --serif:"Iowan Old Style","Palatino Linotype","Palatino","Georgia",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:var(--sans);line-height:1.5;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(28,63,110,.04), transparent 40%),
+      radial-gradient(circle at 80% 90%, rgba(184,112,46,.04), transparent 45%);
+  }
+  header{
+    padding:34px 28px 22px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, var(--paper) 0%, var(--paper-edge) 100%);
+  }
+  .eyebrow{
+    font-family:var(--mono);font-size:11px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--accent);margin:0 0 8px;
+  }
+  .brand{
+    font-family:var(--serif);font-weight:600;font-size:clamp(20px,5.2vw,54px);
+    margin:0;color:var(--prussia-deep);letter-spacing:-.015em;line-height:1.02;
+  }
+  h1{
+    font-family:var(--serif);font-weight:500;font-size:clamp(18px,2.6vw,26px);
+    margin:4px 0 0;color:var(--ink-soft);letter-spacing:-.005em;
+  }
+  .sub{margin:8px 0 0;color:var(--ink-soft);max-width:62ch;font-size:15px}
+  nav{display:flex;gap:0;border-bottom:1px solid var(--line);background:var(--paper-edge)}
+  nav button{
+    flex:0 0 auto;padding:14px 26px;border:none;background:none;cursor:pointer;
+    font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--ink-soft);border-bottom:2px solid transparent;transition:.15s;
+  }
+  nav button:hover{color:var(--ink)}
+  nav button.active{color:var(--prussia-deep);border-bottom-color:var(--accent);background:var(--paper)}
+  main{padding:30px 28px 70px;max-width:1180px;margin:0 auto}
+  .panel{display:none}
+  .panel.active{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .grid{display:grid;grid-template-columns:300px 1fr;gap:34px;align-items:start}
+  @media(max-width:820px){
+    .grid{grid-template-columns:1fr}
+    /* En "Analizar y curva" la mayoría de controles están inactivos hasta
+       que hay una imagen cargada; en móvil (una sola columna) conviene
+       que la zona de carga/escaneo aparezca primero, no al final tras
+       bajar por todos los controles de medición. Solo afecta a #ana. */
+    #ana .viz{order:-1}
+  }
+  .controls{
+    background:#fff;border:1px solid var(--line);border-radius:4px;
+    padding:22px;position:sticky;top:14px;
+  }
+  .controls h2,.viz h2{
+    font-family:var(--serif);font-size:18px;margin:0 0 4px;color:var(--prussia-deep);
+  }
+  .controls .hint{font-size:12.5px;color:var(--ink-soft);margin:0 0 18px}
+  label{display:block;font-size:12px;font-family:var(--mono);letter-spacing:.06em;
+    text-transform:uppercase;color:var(--ink-soft);margin:16px 0 6px}
+  input[type=number],input[type=text],select{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:3px;
+    font-family:var(--mono);font-size:14px;background:var(--paper);color:var(--ink);
+  }
+  input:focus,select:focus{outline:2px solid var(--accent-soft);outline-offset:1px;border-color:var(--accent)}
+  .row{display:flex;gap:10px}
+  .row>*{flex:1}
+  .radio-set{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+  .radio-set label{display:flex;align-items:center;gap:8px;margin:0;text-transform:none;
+    letter-spacing:0;font-family:var(--sans);font-size:14px;color:var(--ink);cursor:pointer}
+  .radio-set input{width:auto}
+  button.act{
+    width:100%;margin-top:22px;padding:12px;border:none;border-radius:3px;cursor:pointer;
+    font-family:var(--mono);font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;
+    background:var(--prussia);color:var(--paper);transition:.15s;
+  }
+  button.act:hover{background:var(--prussia-deep)}
+  button.ghost{background:none;border:1px solid var(--prussia);color:var(--prussia)}
+  button.ghost:hover{background:var(--prussia);color:var(--paper)}
+  .btn-stack{display:flex;flex-direction:column;gap:9px;margin-top:22px}
+  .viz{background:#fff;border:1px solid var(--line);border-radius:4px;padding:22px;min-height:300px}
+  .wedge-wrap{overflow:auto;border:1px solid var(--line);background:#fff;padding:14px;border-radius:3px}
+  canvas{display:block;max-width:100%;height:auto}
+  table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12.5px;margin-top:6px}
+  th,td{border:1px solid var(--line);padding:6px 8px;text-align:right}
+  th{background:var(--paper-edge);color:var(--prussia-deep);text-transform:uppercase;
+     font-size:10.5px;letter-spacing:.08em}
+  td:first-child,th:first-child{text-align:left}
+  .note{font-size:13px;color:var(--ink-soft);border-left:2px solid var(--accent);
+    padding:8px 0 8px 14px;margin:18px 0;background:rgba(184,112,46,.04)}
+  .note strong{color:var(--warn)}
+  .drop{
+    border:2px dashed var(--line);border-radius:4px;padding:40px 20px;text-align:center;
+    color:var(--ink-soft);cursor:pointer;transition:.15s;background:var(--paper)}
+  .drop:hover,.drop.over{border-color:var(--accent);background:rgba(184,112,46,.05);color:var(--ink)}
+  .stage{position:relative;margin-top:18px;display:none}
+  .stage.show{display:block}
+  #scanCanvas{border:1px solid var(--line);cursor:crosshair;max-width:100%;touch-action:none}
+  .stage-hint{font-size:12.5px;color:var(--ink-soft);margin:8px 0}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:3px 9px;border-radius:20px;
+    background:var(--paper-edge);color:var(--prussia-deep);margin-right:6px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--ink-soft);margin-top:10px}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .swatch{width:13px;height:13px;border-radius:2px;display:inline-block}
+  footer{padding:22px 28px;border-top:1px solid var(--line);color:var(--ink-soft);
+    font-size:12px;font-family:var(--mono)}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  @media(max-width:700px){.two-col{grid-template-columns:1fr}}
+  .val{font-family:var(--mono);color:var(--prussia-deep);font-weight:600}
+  details{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+  summary{cursor:pointer;font-size:13px;color:var(--prussia-deep);font-family:var(--mono);
+    letter-spacing:.04em}
+  .num-out{font-family:var(--mono);font-size:13px;background:var(--paper);border:1px solid var(--line);
+    border-radius:3px;padding:10px;white-space:pre-wrap;max-height:160px;overflow:auto;margin-top:8px}
+</style>
+</head>
+<body>
+<header style="position:relative">
+  <div id="langSwitch" style="position:absolute;top:18px;right:28px;font-family:var(--mono);font-size:12px"></div>
+  <p class="eyebrow" data-i18n="eyebrow">Cianotipia · calibración de proceso</p>
+  <p class="brand">CyanoLUT</p>
+  <h1 data-i18n="title">Cuña escalonada y curva de corrección</h1>
+  <p class="sub" data-i18n="subtitle">Genera una cuña escalonada de densidades equiespaciadas para imprimir, expón tu
+  cianotipia, y al escanearla obtén la curva característica del proceso y su corrección inversa
+  lista para Affinity, Photoshop o como tabla.</p>
+</header>
+
+<nav>
+  <button class="active" data-tab="gen" data-i18n="tab_gen">01 · Generar cuña</button>
+  <button data-tab="ana" data-i18n="tab_ana">02 · Analizar y curva</button>
+</nav>
+
+<main>
+<!-- ================= GENERADOR ================= -->
+<section class="panel active" id="gen">
+  <div class="grid">
+    <div class="controls">
+      <h2 data-i18n="g_params">Parámetros</h2>
+      <p class="hint" data-i18n="g_hint">Cuña escalonada para medir la respuesta de tu cianotipia. Se imprime como negativo en acetato; multicolumna que llena el A4.</p>
+
+      <label data-i18n="g_label_lbl">Etiqueta</label>
+      <input type="text" id="g_label" value="CIANOTIPIA" maxlength="24">
+
+      <label data-i18n="g_steps_lbl">Número de pasos</label>
+      <select id="g_steps">
+        <option value="21" selected data-i18n="steps_21">21 pasos</option>
+        <option value="31" data-i18n="steps_31">31 pasos</option>
+      </select>
+
+      <div class="radio-set" style="margin-top:18px">
+        <label><input type="checkbox" id="g_neg" checked> <span data-i18n="g_neg">Negativo para acetato (recomendado)</span></label>
+        <label><input type="checkbox" id="g_nums" checked> <span data-i18n="g_nums">Numerar pasos</span></label>
+        <label><input type="checkbox" id="g_sacr"> <span data-i18n="g_sacr">Banda de sacrificio (láser)</span></label>
+      </div>
+      <p class="hint" style="margin:6px 0 0" data-i18n="g_sacrhint">Barra negra superior que absorbe el sobredepósito de tóner del borde de entrada al fusor. Útil en impresoras láser. En inkjet no hace falta (no hay fusor) y puedes desactivarla.</p>
+
+      <button class="act" id="g_render" data-i18n="g_render">Generar previsualización</button>
+      <div class="btn-stack">
+        <button class="ghost" id="g_pdf" data-i18n="g_pdf">Descargar PDF para imprimir</button>
+        <button class="ghost" id="g_png" data-i18n="g_png">Descargar PNG</button>
+      </div>
+    </div>
+
+    <div class="viz">
+      <h2 data-i18n="g_preview">Previsualización</h2>
+      <p class="hint" id="g_meta">—</p>
+      <div class="wedge-wrap">
+        <canvas id="wedgeCanvas" width="400" height="800"></canvas>
+      </div>
+      <div class="note" data-i18n="g_note">
+        <strong>Antes de medir:</strong> seca la copia por completo y espera ≥24 h —
+        el azul de Prusia intensifica por oxidación tras el lavado. Apaga toda corrección
+        automática del escáner. Mide el <em>canal rojo</em>, donde el azul de Prusia tiene mayor rango tonal.
+      </div>
+      <details>
+        <summary data-i18n="g_summary">Valores de entrada de cada paso</summary>
+        <div class="num-out" id="g_table">—</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ANALIZADOR ================= -->
+<section class="panel" id="ana">
+  <div class="grid">
+    <div class="controls">
+      <h2 data-i18n="a_meas">Medición</h2>
+      <p class="hint" data-i18n="a_load">Carga el escaneo de la cianotipia seca.</p>
+
+      <label data-i18n="a_steps_lbl">Número de pasos</label>
+      <select id="a_steps">
+        <option value="21" selected data-i18n="steps_21">21 pasos</option>
+        <option value="31" data-i18n="steps_31">31 pasos</option>
+      </select>
+
+      <label data-i18n="a_channel_lbl">Canal a medir</label>
+      <select id="a_channel">
+        <option value="r" selected data-i18n="ch_r">Rojo</option>
+        <option value="lum" data-i18n="ch_lum">Luminosidad</option>
+        <option value="g" data-i18n="ch_g">Verde</option>
+        <option value="b" data-i18n="ch_b">Azul</option>
+      </select>
+
+      <p class="hint" id="a_gridinfo" style="margin:16px 0 0">—</p>
+
+      <div class="note" style="margin-top:14px" data-i18n="a_marknote">
+        Por <strong>cada columna</strong> marca dos puntos: centro del <b>primer paso</b> (arriba)
+        y centro del <b>último paso</b> (abajo). El resto de la columna se interpola. Recorre las
+        columnas de izquierda a derecha, igual que la numeración impresa.
+      </div>
+
+      <label><span data-i18n="a_winlbl_lbl">Tamaño de la ventana de medición:</span> <span id="a_winlbl" class="val">60%</span></label>
+      <input type="range" id="a_win" min="20" max="90" value="60" style="width:100%;padding:0">
+      <p class="hint" style="margin:6px 0 0" data-i18n="a_winhint">% del paso que se promedia (mediana), centrado. Verás el recuadro sobre cada paso al marcar. Menor = más central y seguro; mayor = promedia más píxeles.</p>
+
+      <button class="act" id="a_measure" disabled data-i18n="a_measbtn">Medir pasos</button>
+      <button class="ghost" id="a_reset" style="margin-top:9px;width:100%" data-i18n="a_reset">Reiniciar marcas</button>
+
+      <div class="radio-set" style="margin-top:16px">
+        <label><input type="checkbox" id="a_smooth" checked> <span data-i18n="a_smooth">Homogeneizar curva (recomendado)</span></label>
+        <label><input type="checkbox" id="a_prefilter"> <span data-i18n="a_prefilter">Prefiltro suave (reduce ruido)</span></label>
+        <label><input type="checkbox" id="a_invert"> <span data-i18n="a_invert">Invertir sentido de la corrección</span></label>
+      </div>
+      <p class="hint" style="margin:6px 0 0" data-i18n="a_smoothhint">Homogeneizar fuerza una curva monótona y suave (PAVA + PCHIP). El prefiltro promedia ligeramente cada paso con sus vecinos antes de homogeneizar; úsalo solo si ves ruido residual, respeta los extremos.</p>
+      <div class="btn-stack">
+        <button class="ghost" id="a_cube" disabled data-i18n="a_cube">Exportar .cube — Affinity (LUT)</button>
+        <button class="ghost" id="a_acv" disabled data-i18n="a_acv">Exportar .acv — solo Photoshop</button>
+        <button class="ghost" id="a_csv" disabled data-i18n="a_csv">Exportar tabla .csv</button>
+      </div>
+    </div>
+
+    <div class="viz">
+      <h2 data-i18n="a_scanmeas">Escaneo y medición</h2>
+      <div class="drop" id="dropZone" data-i18n="a_drop">
+        Arrastra aquí el escaneo, o pulsa para elegir archivo
+        <input type="file" id="fileInput" accept="image/*" hidden>
+      </div>
+
+      <div class="stage" id="stage">
+        <p class="stage-hint" id="clickHint" data-i18n="clickStep0">Pulsa el centro del <b>paso 0</b>.</p>
+        <canvas id="scanCanvas"></canvas>
+      </div>
+
+      <div id="results" style="margin-top:20px;display:none">
+        <div class="two-col">
+          <div>
+            <h2 style="font-size:15px" data-i18n="a_resp">Respuesta medida del proceso</h2>
+            <canvas id="respCanvas" width="380" height="300"></canvas>
+            <p class="hint" style="margin:6px 0 0" data-i18n="a_resphint">Densidad real en la cianotipia según el valor del negativo. La diagonal punteada es la respuesta ideal lineal: cuanto más se aleja tu curva, más corrección hace falta.</p>
+            <div class="legend">
+              <span><i class="swatch" style="background:var(--prussia)"></i><span data-i18n="lg_curve">Curva (homogeneizada si está activa)</span></span>
+              <span><i class="swatch" style="background:rgba(28,63,110,0.30)"></i><span data-i18n="lg_raw">Cruda</span></span>
+              <span><i class="swatch" style="background:var(--ink-soft)"></i><span data-i18n="lg_ideal">Ideal lineal</span></span>
+            </div>
+            <p class="hint" style="margin:8px 0 0" data-i18n="a_discardhint">Haz clic en un punto para <b>descartarlo</b> (excluirlo por artefacto conocido); se reconstruye interpolando entre vecinos sanos. Clic de nuevo para restaurarlo.</p>
+            <button class="ghost" id="a_discardclear" style="margin-top:8px;width:100%;display:none" data-i18n="a_discardclear">Restaurar puntos descartados</button>
+          </div>
+          <div>
+            <h2 style="font-size:15px" data-i18n="a_corr">Corrección del negativo</h2>
+            <canvas id="corrCanvas" width="380" height="300"></canvas>
+            <p class="hint" style="margin:6px 0 0" data-i18n="a_corrhint">Cómo se remapea cada valor del negativo antes de imprimirlo. Esto es exactamente lo que aplican el .cube y el .acv. La diagonal punteada sería "sin corrección".</p>
+            <div class="legend">
+              <span><i class="swatch" style="background:var(--accent)"></i><span data-i18n="lg_corr">Corrección</span></span>
+              <span><i class="swatch" style="background:var(--ink-soft)"></i><span data-i18n="lg_nocorr">Sin corregir</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:20px">
+          <h2 style="font-size:15px" data-i18n="a_databystep">Datos por paso</h2>
+          <div style="max-height:240px;overflow:auto">
+            <table id="dataTable"></table>
+          </div>
+          <div class="note" style="margin-top:14px" data-i18n="a_applynote">
+            <strong>Cómo aplicar la corrección:</strong> ábrela sobre tu <b>negativo</b> (la imagen
+            ya invertida que vas a imprimir en acetato), no sobre el positivo. Affinity: Capa de
+            ajuste → LUT → Cargar el <b>.cube</b>. Photoshop: Curvas → menú → Cargar preajuste el
+            <b>.acv</b>. Luego imprime el negativo corregido y expón.
+            <br><br><strong>LUT (.cube):</strong> aplícalo sobre el negativo en <b>escala de grises</b>;
+            en RGB la curva puede amplificar tintes de color.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer data-i18n="footer">Funcionamiento en modo local · curva exportable a .acv / .csv / .cube · © 2026 Alberto Areta — licencia MIT</footer>
+
+<script>
+/* =====================================================
+   Cianotipia · Calibración
+   © 2026 Alberto Areta — Licenciado bajo MIT
+   https://github.com/[PENDIENTE]
+===================================================== */
+
+/* =====================================================
+   i18n · diccionario ES / EN / FR / EU
+===================================================== */
+const I18N={
+ es:{
+  _label:"ES",
+  word_steps:"pasos", word_linear:"lineal",
+  eyebrow:"Cianotipia · calibración de proceso",
+  title:"Cuña escalonada y curva de corrección",
+  subtitle:"Genera una cuña escalonada de densidades equiespaciadas para imprimir, expón tu cianotipia, y al escanearla obtén la curva característica del proceso y su corrección inversa lista para Affinity, Photoshop o como tabla.",
+  tab_gen:"01 · Generar cuña", tab_ana:"02 · Analizar y curva",
+  g_params:"Parámetros",
+  g_hint:"Cuña escalonada para medir la respuesta de tu cianotipia. Se imprime como negativo en acetato; multicolumna que llena el A4.",
+  g_label_lbl:"Etiqueta",
+  g_steps_lbl:"Número de pasos", steps_21:"21 pasos", steps_31:"31 pasos",
+  g_neg:"Negativo para acetato (recomendado)", g_nums:"Numerar pasos",
+  g_sacr:"Banda de sacrificio (láser)",
+  g_sacrhint:"Barra negra superior que absorbe el sobredepósito de tóner del borde de entrada al fusor. Útil en impresoras láser. En inkjet no hace falta (no hay fusor) y puedes desactivarla.",
+  g_render:"Generar previsualización", g_pdf:"Descargar PDF para imprimir", g_png:"Descargar PNG",
+  g_preview:"Previsualización",
+  g_note:"<strong>Antes de medir:</strong> seca la copia por completo y espera ≥24 h — el azul de Prusia intensifica por oxidación tras el lavado. Apaga toda corrección automática del escáner. Mide el <em>canal rojo</em>, donde el azul de Prusia tiene mayor rango tonal.",
+  g_summary:"Valores de entrada de cada paso",
+  a_meas:"Medición", a_load:"Carga el escaneo de la cianotipia seca.",
+  a_steps_lbl:"Número de pasos",
+  a_channel_lbl:"Canal a medir",
+  ch_lum:"Luminosidad",
+  ch_r:"Rojo",
+  ch_g:"Verde",
+  ch_b:"Azul",
+  a_marknote:"Por <strong>cada columna</strong> marca dos puntos: centro del <b>primer paso</b> (arriba) y centro del <b>último paso</b> (abajo). El resto de la columna se interpola. Recorre las columnas de izquierda a derecha, igual que la numeración impresa.",
+  a_winlbl_lbl:"Tamaño de la ventana de medición:",
+  a_winhint:"% del paso que se promedia (mediana), centrado. Verás el recuadro sobre cada paso al marcar. Menor = más central y seguro; mayor = promedia más píxeles.",
+  a_measbtn:"Medir pasos", a_reset:"Reiniciar marcas",
+  a_smooth:"Homogeneizar curva (recomendado)",
+  a_prefilter:"Prefiltro suave (reduce ruido)",
+  a_invert:"Invertir sentido de la corrección",
+  a_smoothhint:"Homogeneizar fuerza una curva monótona y suave (PAVA + PCHIP). El prefiltro promedia ligeramente cada paso con sus vecinos antes de homogeneizar; úsalo solo si ves ruido residual, respeta los extremos.",
+  a_discardhint:"Haz clic en un punto para <b>descartarlo</b> (excluirlo por artefacto conocido); se reconstruye interpolando entre vecinos sanos. Clic de nuevo para restaurarlo.",
+  a_discardclear:"Restaurar puntos descartados",
+  a_cube:"Exportar .cube — Affinity (LUT)", a_acv:"Exportar .acv — solo Photoshop", a_csv:"Exportar tabla .csv",
+  a_scanmeas:"Escaneo y medición",
+  a_drop:"Arrastra aquí el escaneo, o pulsa para elegir archivo",
+  a_resp:"Respuesta medida del proceso",
+  a_resphint:"Densidad real en la cianotipia según el valor del negativo. La diagonal punteada es la respuesta ideal lineal: cuanto más se aleja tu curva, más corrección hace falta.",
+  axis_gray:"gris del negativo: opaco → transparente",
+  axis_density:"densidad en cianotipia ↑",
+  lg_curve:"Curva (homogeneizada si está activa)", lg_raw:"Cruda", lg_ideal:"Ideal lineal",
+  a_corr:"Corrección del negativo",
+  a_corrhint:"Cómo se remapea cada valor del negativo antes de imprimirlo. Esto es exactamente lo que aplican el .cube y el .acv. La diagonal punteada sería \"sin corrección\".",
+  axis_neg_orig:"valor original del negativo →",
+  axis_neg_corr:"valor corregido ↑",
+  lg_corr:"Corrección", lg_nocorr:"Sin corregir",
+  a_databystep:"Datos por paso",
+  a_applynote:"<strong>Cómo aplicar la corrección:</strong> ábrela sobre tu <b>negativo</b> (la imagen ya invertida que vas a imprimir en acetato), no sobre el positivo. Affinity: Capa de ajuste → LUT → Cargar el <b>.cube</b>. Photoshop: Curvas → menú → Cargar preajuste el <b>.acv</b>. Luego imprime el negativo corregido y expón.<br><br><strong>LUT (.cube):</strong> aplícalo sobre el negativo en <b>escala de grises</b>; en RGB la curva puede amplificar tintes de color.",
+  footer:"Funcionamiento en modo local · curva exportable a .acv / .csv / .cube · © 2026 Alberto Areta — licencia MIT",
+  // dinámicos JS
+  clickStep0:"Pulsa el centro del <b>paso 0</b>.",
+  gridinfo:(t,c,r)=>`Cuña fija: ${t} pasos · ${c} columnas × ${r} filas. Marca ${c} columnas.`,
+  allmarked:"Todas las columnas marcadas. Pulsa <b>Medir pasos</b>.",
+  colFirst:(d,c,np)=>`Columna ${d+1}/${c} (${np} pasos): pulsa el <b>primer paso</b> (arriba).`,
+  colLast:(d,c)=>`Columna ${d+1}/${c}: pulsa el <b>último paso</b> (abajo).`,
+  metaGen:(n,c,r,pw,ph,neg)=>`${n} pasos · ${c} columnas × ${r} filas · paso ${pw}×${ph} mm · centrado · lineal · ${neg?'negativo':'positivo'}`,
+  tbl_step:"paso", tbl_col:"col", tbl_mean:"media", tbl_refl:"refl%", tbl_D:"D rel",
+  pdfSub:"Cianotipia · imprimir a tamaño real (sin ajuste de escala). Secar 24 h antes de medir.",
+  pdfNoLib:"No se pudo cargar la librería de PDF (jsPDF), necesaria solo para el PDF. Comprueba tu conexión y recarga la página, o usa «Descargar PNG», que funciona sin conexión.",
+  layoutWarn:"⚠ no cabe en A4 con estos márgenes"
+ },
+ en:{
+  _label:"EN",
+  word_steps:"steps", word_linear:"linear",
+  eyebrow:"Cyanotype · process calibration",
+  title:"Step wedge and correction curve",
+  subtitle:"Generate an evenly-spaced density step wedge to print, expose your cyanotype, and on scanning it get the process response curve and its inverse correction ready for Affinity, Photoshop or as a table.",
+  tab_gen:"01 · Generate wedge", tab_ana:"02 · Analyze & curve",
+  g_params:"Parameters",
+  g_hint:"Step wedge to measure your cyanotype's response. Printed as a negative on acetate; multi-column filling the A4.",
+  g_label_lbl:"Label",
+  g_steps_lbl:"Number of steps", steps_21:"21 steps", steps_31:"31 steps",
+  g_neg:"Negative for acetate (recommended)", g_nums:"Number the steps",
+  g_sacr:"Sacrificial band (laser)",
+  g_sacrhint:"Top black bar that absorbs the toner over-deposition at the fuser's leading edge. Useful on laser printers. On inkjet it isn't needed (no fuser) and can be turned off.",
+  g_render:"Generate preview", g_pdf:"Download PDF to print", g_png:"Download PNG",
+  g_preview:"Preview",
+  g_note:"<strong>Before measuring:</strong> dry the print fully and wait ≥24 h — Prussian blue intensifies through oxidation after washing. Turn off all automatic scanner correction. Measure the <em>red channel</em>, where Prussian blue has the greatest tonal range.",
+  g_summary:"Input value of each step",
+  a_meas:"Measurement", a_load:"Load the scan of the dry cyanotype.",
+  a_steps_lbl:"Number of steps",
+  a_channel_lbl:"Channel to measure",
+  ch_lum:"Luminosity",
+  ch_r:"Red",
+  ch_g:"Green",
+  ch_b:"Blue",
+  a_marknote:"For <strong>each column</strong> mark two points: centre of the <b>first step</b> (top) and centre of the <b>last step</b> (bottom). The rest of the column is interpolated. Go through the columns left to right, matching the printed numbering.",
+  a_winlbl_lbl:"Measurement window size:",
+  a_winhint:"% of the step that is averaged (median), centred. You'll see the box over each step as you mark. Smaller = more central and safe; larger = averages more pixels.",
+  a_measbtn:"Measure steps", a_reset:"Reset marks",
+  a_smooth:"Homogenize curve (recommended)",
+  a_prefilter:"Light pre-filter (reduces noise)",
+  a_invert:"Invert correction direction",
+  a_smoothhint:"Homogenize forces a monotonic, smooth curve (PAVA + PCHIP). The pre-filter lightly averages each step with its neighbours before homogenizing; use it only if you see residual noise, it preserves the endpoints.",
+  a_discardhint:"Click a point to <b>discard</b> it (exclude it as a known artefact); it is reconstructed by interpolating between healthy neighbours. Click again to restore it.",
+  a_discardclear:"Restore discarded points",
+  a_cube:"Export .cube — Affinity (LUT)", a_acv:"Export .acv — Photoshop only", a_csv:"Export .csv table",
+  a_scanmeas:"Scan & measurement",
+  a_drop:"Drag the scan here, or click to choose a file",
+  a_resp:"Measured process response",
+  a_resphint:"Actual density in the cyanotype vs the negative value. The dashed diagonal is the ideal linear response: the further your curve strays, the more correction is needed.",
+  axis_gray:"negative gray: opaque → transparent",
+  axis_density:"density in cyanotype ↑",
+  lg_curve:"Curve (homogenized if active)", lg_raw:"Raw", lg_ideal:"Linear ideal",
+  a_corr:"Negative correction",
+  a_corrhint:"How each negative value is remapped before printing. This is exactly what the .cube and .acv apply. The dashed diagonal would be \"no correction\".",
+  axis_neg_orig:"original negative value →",
+  axis_neg_corr:"corrected value ↑",
+  lg_corr:"Correction", lg_nocorr:"Uncorrected",
+  a_databystep:"Data per step",
+  a_applynote:"<strong>How to apply the correction:</strong> open it on your <b>negative</b> (the already-inverted image you'll print on acetate), not on the positive. Affinity: Adjustment layer → LUT → Load the <b>.cube</b>. Photoshop: Curves → menu → Load preset the <b>.acv</b>. Then print the corrected negative and expose.<br><br><strong>LUT (.cube):</strong> apply it to the negative in <b>grayscale</b>; in RGB the curve may amplify color casts.",
+  footer:"Runs entirely locally · curve exportable as .acv / .csv / .cube · © 2026 Alberto Areta — MIT license",
+  clickStep0:"Click the centre of <b>step 0</b>.",
+  gridinfo:(t,c,r)=>`Fixed wedge: ${t} steps · ${c} columns × ${r} rows. Mark ${c} columns.`,
+  allmarked:"All columns marked. Press <b>Measure steps</b>.",
+  colFirst:(d,c,np)=>`Column ${d+1}/${c} (${np} steps): click the <b>first step</b> (top).`,
+  colLast:(d,c)=>`Column ${d+1}/${c}: click the <b>last step</b> (bottom).`,
+  metaGen:(n,c,r,pw,ph,neg)=>`${n} steps · ${c} columns × ${r} rows · step ${pw}×${ph} mm · centred · linear · ${neg?'negative':'positive'}`,
+  tbl_step:"step", tbl_col:"col", tbl_mean:"mean", tbl_refl:"refl%", tbl_D:"D rel",
+  pdfSub:"Cyanotype · print at real size (no scaling). Dry 24 h before measuring.",
+  pdfNoLib:"The PDF library (jsPDF), needed only for the PDF, could not load. Check your connection and reload the page, or use \u201cDownload PNG\u201d, which works offline.",
+  layoutWarn:"\u26a0 does not fit on A4 with these margins"
+ },
+ fr:{
+  _label:"FR",
+  word_steps:"paliers", word_linear:"linéaire",
+  eyebrow:"Cyanotype · calibration du procédé",
+  title:"Coin sensitométrique et courbe de correction",
+  subtitle:"Générez un coin sensitométrique à densités régulièrement espacées à imprimer, exposez votre cyanotype, et en le numérisant obtenez la courbe de réponse du procédé ainsi que sa correction inverse, prête pour Affinity, Photoshop ou sous forme de tableau.",
+  tab_gen:"01 · Générer le coin", tab_ana:"02 · Analyser et courbe",
+  g_params:"Paramètres",
+  g_hint:"Coin sensitométrique pour mesurer la réponse de votre cyanotype. Imprimé en négatif sur acétate ; disposition multi-colonnes remplissant l'A4.",
+  g_label_lbl:"Étiquette",
+  g_steps_lbl:"Nombre de paliers", steps_21:"21 paliers", steps_31:"31 paliers",
+  g_neg:"Négatif pour acétate (recommandé)", g_nums:"Numéroter les paliers",
+  g_sacr:"Bande de sacrifice (laser)",
+  g_sacrhint:"Barre noire supérieure qui absorbe le surdépôt de toner du bord d'attaque au niveau du four. Utile sur imprimante laser. En jet d'encre, elle est inutile (pas de four) et peut être désactivée.",
+  g_render:"Générer l'aperçu", g_pdf:"Télécharger le PDF à imprimer", g_png:"Télécharger le PNG",
+  g_preview:"Aperçu",
+  g_note:"<strong>Avant de mesurer :</strong> laissez sécher la copie complètement et attendez ≥24 h — le bleu de Prusse s'intensifie par oxydation après le lavage. Désactivez toute correction automatique du scanner. Mesurez le <em>canal rouge</em>, où le bleu de Prusse offre la plus grande plage tonale.",
+  g_summary:"Valeurs d'entrée de chaque palier",
+  a_meas:"Mesure", a_load:"Chargez le scan du cyanotype sec.",
+  a_steps_lbl:"Nombre de paliers",
+  a_channel_lbl:"Canal à mesurer",
+  ch_lum:"Luminosité",
+  ch_r:"Rouge",
+  ch_g:"Vert",
+  ch_b:"Bleu",
+  a_marknote:"Pour <strong>chaque colonne</strong>, marquez deux points : centre du <b>premier palier</b> (en haut) et centre du <b>dernier palier</b> (en bas). Le reste de la colonne est interpolé. Parcourez les colonnes de gauche à droite, comme la numérotation imprimée.",
+  a_winlbl_lbl:"Taille de la fenêtre de mesure :",
+  a_winhint:"% du palier moyenné (médiane), centré. Vous verrez le cadre sur chaque palier en marquant. Plus petit = plus central et sûr ; plus grand = moyenne davantage de pixels.",
+  a_measbtn:"Mesurer les paliers", a_reset:"Réinitialiser les marques",
+  a_smooth:"Homogénéiser la courbe (recommandé)",
+  a_prefilter:"Préfiltre léger (réduit le bruit)",
+  a_invert:"Inverser le sens de la correction",
+  a_smoothhint:"L'homogénéisation impose une courbe monotone et lisse (PAVA + PCHIP). Le préfiltre moyenne légèrement chaque palier avec ses voisins avant l'homogénéisation ; à utiliser seulement si vous constatez du bruit résiduel, il préserve les extrémités.",
+  a_discardhint:"Cliquez sur un point pour l'<b>écarter</b> (l'exclure comme artefact connu) ; il est reconstruit par interpolation entre voisins sains. Recliquez pour le rétablir.",
+  a_discardclear:"Rétablir les points écartés",
+  a_cube:"Exporter .cube — Affinity (LUT)", a_acv:"Exporter .acv — Photoshop uniquement", a_csv:"Exporter le tableau .csv",
+  a_scanmeas:"Scan et mesure",
+  a_drop:"Glissez le scan ici, ou cliquez pour choisir un fichier",
+  a_resp:"Réponse mesurée du procédé",
+  a_resphint:"Densité réelle du cyanotype en fonction de la valeur du négatif. La diagonale en pointillés est la réponse linéaire idéale : plus votre courbe s'en éloigne, plus la correction nécessaire est importante.",
+  axis_gray:"gris du négatif : opaque → transparent",
+  axis_density:"densité du cyanotype ↑",
+  lg_curve:"Courbe (homogénéisée si activée)", lg_raw:"Brute", lg_ideal:"Idéale linéaire",
+  a_corr:"Correction du négatif",
+  a_corrhint:"Comment chaque valeur du négatif est remappée avant impression. C'est exactement ce qu'appliquent le .cube et le .acv. La diagonale en pointillés représenterait « sans correction ».",
+  axis_neg_orig:"valeur originale du négatif →",
+  axis_neg_corr:"valeur corrigée ↑",
+  lg_corr:"Correction", lg_nocorr:"Non corrigé",
+  a_databystep:"Données par palier",
+  a_applynote:"<strong>Comment appliquer la correction :</strong> ouvrez-la sur votre <b>négatif</b> (l'image déjà inversée que vous allez imprimer sur acétate), pas sur le positif. Affinity : Calque de réglage → LUT → Charger le <b>.cube</b>. Photoshop : Courbes → menu → Charger le préréglage <b>.acv</b>. Puis imprimez le négatif corrigé et exposez.<br><br><strong>LUT (.cube) :</strong> appliquez-la au négatif en <b>niveaux de gris</b> ; en RVB la courbe peut amplifier les dominantes de couleur.",
+  footer:"Fonctionne entièrement en local · courbe exportable en .acv / .csv / .cube · © 2026 Alberto Areta — licence MIT",
+  clickStep0:"Cliquez au centre du <b>palier 0</b>.",
+  gridinfo:(t,c,r)=>`Coin fixe : ${t} paliers · ${c} colonnes × ${r} lignes. Marquez ${c} colonnes.`,
+  allmarked:"Toutes les colonnes sont marquées. Appuyez sur <b>Mesurer les paliers</b>.",
+  colFirst:(d,c,np)=>`Colonne ${d+1}/${c} (${np} paliers) : cliquez le <b>premier palier</b> (en haut).`,
+  colLast:(d,c)=>`Colonne ${d+1}/${c} : cliquez le <b>dernier palier</b> (en bas).`,
+  metaGen:(n,c,r,pw,ph,neg)=>`${n} paliers · ${c} colonnes × ${r} lignes · palier ${pw}×${ph} mm · centré · linéaire · ${neg?'négatif':'positif'}`,
+  tbl_step:"palier", tbl_col:"col", tbl_mean:"moy.", tbl_refl:"réfl%", tbl_D:"D rel",
+  pdfSub:"Cyanotype · imprimer à taille réelle (sans mise à l'échelle). Sécher 24 h avant de mesurer.",
+  pdfNoLib:"La bibliothèque PDF (jsPDF), nécessaire uniquement pour le PDF, n'a pas pu se charger. Vérifiez votre connexion et rechargez la page, ou utilisez « Télécharger le PNG », qui fonctionne hors ligne.",
+  layoutWarn:"\u26a0 ne tient pas sur A4 avec ces marges"
+ },
+ eu:{
+  _label:"EU",
+  word_steps:"maila", word_linear:"lineala",
+  eyebrow:"Zianotipia · prozesuaren kalibrazioa",
+  title:"Maila-kuina eta zuzenketa-kurba",
+  subtitle:"Sortu inprimatzeko dentsitate-tarte berdinetako maila-kuina bat, esposatu zure zianotipa, eta eskaneatzean prozesuaren erantzun-kurba eta bere alderantzizko zuzenketa lortuko dituzu; Affinity, Photoshop edo taula formatuan erabiltzeko prest.",
+  tab_gen:"01 · Kuina sortu", tab_ana:"02 · Aztertu eta kurba",
+  g_params:"Parametroak",
+  g_hint:"Maila-kuina, zure zianotipiaren erantzuna neurtzeko. Azetatoan negatibo gisa inprimatzen da; A4 osoa betetzen duen hainbat zutabeko diseinua",
+  g_label_lbl:"Etiketa",
+  g_steps_lbl:"Maila kopurua", steps_21:"21 maila", steps_31:"31 maila",
+  g_neg:"Negatiboa azetatorako (gomendatua)", g_nums:"Zenbakitu mailak",
+  g_sacr:"Sakrifizio-banda (laser)",
+  g_sacrhint:"Goiko barra beltza, fusorearen sarrera-ertzeko toner gehiegizko-metaketa xurgatzen duena. Laser inprimagailuetan erabilgarria. Inkjet-en ez da beharrezkoa (ez dago fusorerik) eta desaktibatu daiteke.",
+  g_render:"Aurrebista sortu", g_pdf:"PDFa deskargatu inprimatzeko", g_png:"PNGa deskargatu",
+  g_preview:"Aurrebista",
+  g_note:"<strong>Neurtu aurretik:</strong> lehortu kopia erabat eta itxaron ≥24 h — Prusiar urdina oxidazioz tindatzen da garbitu ondoren. Itzali eskanerraren zuzenketa automatiko guztiak. Neurtu <em>kanal gorria</em>, Prusiar urdinak tarte tonal handiena duen tokia.",
+  g_summary:"Maila bakoitzaren sarrera-balioak",
+  a_meas:"Neurketa", a_load:"Kargatu zianotipia lehorraren eskaneoa.",
+  a_steps_lbl:"Maila kopurua",
+  a_channel_lbl:"Neurtzeko kanala",
+  ch_lum:"Distira",
+  ch_r:"Gorria",
+  ch_g:"Berdea",
+  ch_b:"Urdina",
+  a_marknote:"<strong>Zutabe bakoitzeko</strong> bi puntu markatu: <b>lehen mailaren</b> erdigunea (goian) eta <b>azken mailaren</b> erdigunea (behean). Zutabearen gainerakoa interpolatu egiten da. Zutabeak ezkerretik eskuinera zeharkatu, inprimatutako zenbakitzearekin bat.",
+  a_winlbl_lbl:"Neurketa-leihoaren tamaina:",
+  a_winhint:"Batez bestekotzen den mailaren %a (mediana), zentratua. Lauki bat ikusiko duzu maila bakoitzaren gainean markatzean. Txikiagoa = zentralagoa eta seguruagoa; handiagoa = pixel gehiago batez bestekotzen ditu.",
+  a_measbtn:"Mailak neurtu", a_reset:"Markak berrezarri",
+  a_smooth:"Kurba homogeneizatua (gomendatua)",
+  a_prefilter:"Aurre-iragazki leuna (zarata murrizten du)",
+  a_invert:"Zuzenketaren noranzkoa alderantzikatu",
+  a_smoothhint:"Homogeneizatzeak kurba monotono eta leun bat behartzen du (PAVA + PCHIP). Aurre-iragazkiak maila bakoitza bere auzokideekin arinki batez bestekotzen du homogeneizatu aurretik; erabili soilik zarata soberakinik ikusten baduzu, muturrak errespetatzen ditu.",
+  a_discardhint:"Egin klik puntu batean <b>baztertzeko</b> (artefaktu ezagun gisa kentzeko); auzoko osasuntsuen artean interpolatuz berreraikitzen da. Egin klik berriz leheneratzeko.",
+  a_discardclear:"Leheneratu baztertutako puntuak",
+  a_cube:"Esportatu .cube — Affinity (LUT)", a_acv:"Esportatu .acv — Photoshop soilik", a_csv:"Esportatu .csv taula",
+  a_scanmeas:"Eskaneoa eta neurketa",
+  a_drop:"Arrastatu eskaneoa hona, edo sakatu fitxategi bat aukeratzeko",
+  a_resp:"Prozesuaren erantzun neurtua",
+  a_resphint:"Zianotipiaren benetako dentsitatea negatiboaren balioaren araberakoa da. Diagonal puntukatua erantzun linealaren ideala da: zure kurba zenbat eta gehiago aldentzen den, orduan eta zuzenketa gehiago behar da.",
+  axis_gray:"negatiboaren grisa: opakua → gardena",
+  axis_density:"zianotipiako dentsitatea ↑",
+  lg_curve:"Kurba (homogeneizatua aktibo badago)", lg_raw:"Gordina", lg_ideal:"Ideal lineala",
+  a_corr:"Negatiboaren zuzenketa",
+  a_corrhint:"Negatiboaren balio bakoitza nola berregokitzen den inprimatu aurretik. Hau da hain zuzen ere .cube-k eta .acv-k aplikatzen dutena. Diagonal puntukatuak \"zuzenketarik gabe\" adieraziko luke.",
+  axis_neg_orig:"negatiboaren jatorrizko balioa →",
+  axis_neg_corr:"balio zuzendua ↑",
+  lg_corr:"Zuzenketa", lg_nocorr:"Zuzendu gabe",
+  a_databystep:"Mailaka datuak",
+  a_applynote:"<strong>Zuzenketa nola aplikatu:</strong> ireki zure <b>negatiboan</b> (azetatoan inprimatuko duzun jada alderantzikatutako irudian), ez positiboan. Affinity: Doikuntza-geruza → LUT → Kargatu <b>.cube</b>. Photoshop: Kurbak → menua → Kargatu aurrezarpena <b>.acv</b>. Ondoren inprimatu negatibo zuzendua eta esposatu.<br><br><strong>LUT (.cube):</strong> aplikatu negatiboari <b>gris-eskalan</b>; RGBn kurbak kolore-tindak areagotu ditzake.",
+  footer:"Modu lokalean funtzionatzen du · kurba .acv / .csv / .cube gisa esportagarria · © 2026 Alberto Areta — MIT lizentzia",
+  clickStep0:"Sakatu <b>0. mailaren</b> erdigunea.",
+  gridinfo:(t,c,r)=>`Kuina finkoa: ${t} maila · ${c} zutabe × ${r} errenkada. Markatu ${c} zutabe.`,
+  allmarked:"Zutabe guztiak markatuta. Sakatu <b>Mailak neurtu</b>.",
+  colFirst:(d,c,np)=>`${d+1}/${c} zutabea (${np} maila): sakatu <b>lehen maila</b> (goian).`,
+  colLast:(d,c)=>`${d+1}/${c} zutabea: sakatu <b>azken maila</b> (behean).`,
+  metaGen:(n,c,r,pw,ph,neg)=>`${n} maila · ${c} zutabe × ${r} errenkada · maila ${pw}×${ph} mm · zentratua · lineala · ${neg?'negatiboa':'positiboa'}`,
+  tbl_step:"maila", tbl_col:"zut", tbl_mean:"batez b.", tbl_refl:"isla%", tbl_D:"D erl",
+  pdfSub:"Zianotipia · benetako tamainan inprimatu (eskalarik gabe). 24 h lehortu neurtu aurretik.",
+  pdfNoLib:"Ezin izan da PDF liburutegia (jsPDF) kargatu; PDFrako soilik behar da. Egiaztatu konexioa eta birkargatu orria, edo erabili \u00abDeskargatu PNGa\u00bb, konexiorik gabe funtzionatzen baitu.",
+  layoutWarn:"\u26a0 ez da A4-an sartzen marjina hauekin"
+ }
+};
+/* idiomas disponibles = claves de I18N, en el orden en que se declararon */
+const LANGS = Object.keys(I18N);
+function detectLang(){
+  const nav=(navigator.language||'es').toLowerCase().slice(0,2);
+  return LANGS.includes(nav) ? nav : 'es';
+}
+let LANG = detectLang();
+function t(key){ return (I18N[LANG] && I18N[LANG][key]!==undefined) ? I18N[LANG][key] : (I18N.es[key]||key); }
+
+/* construye el selector de idioma una sola vez, a partir de LANGS */
+function buildLangSwitch(){
+  const box=document.getElementById('langSwitch');
+  if(!box) return;
+  box.innerHTML = LANGS.map((code,i)=>
+    (i>0?'<span style="color:var(--line)"> · </span>':'') +
+    `<button type="button" class="langbtn" data-lang="${code}" style="border:none;background:none;cursor:pointer">${I18N[code]._label||code.toUpperCase()}</button>`
+  ).join('');
+  box.querySelectorAll('.langbtn').forEach(btn=>{
+    btn.onclick=()=>{ LANG=btn.dataset.lang; applyLang(); };
+  });
+}
+function updateLangSwitchStyle(){
+  document.querySelectorAll('#langSwitch .langbtn').forEach(btn=>{
+    const active = btn.dataset.lang===LANG;
+    btn.style.color = active?'var(--accent)':'var(--ink-soft)';
+    btn.style.fontWeight = active?'600':'400';
+  });
+}
+
+function applyLang(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const v=t(el.getAttribute('data-i18n'));
+    if(typeof v==='string') el.innerHTML=v;
+  });
+  document.documentElement.lang=LANG;
+  updateLangSwitchStyle();
+  // re-render dinámicos si procede
+  if(typeof genData!=='undefined' && genData) { try{ renderWedge(); }catch(e){} }
+  if(typeof A_LAYOUT!=='undefined'){ const gi=document.getElementById('a_gridinfo'); if(gi) gi.textContent=t('gridinfo')(A_TOTAL,A_COLS,A_ROWS); }
+  if(typeof updateHint==='function') updateHint();
+  if(typeof measured!=='undefined' && measured){ try{ drawResults(measured.rows); fillTable(measured.rows);}catch(e){} }
+}
+buildLangSwitch();
+
+/* ---------- utilidades de pestañas ---------- */
+document.querySelectorAll('nav button').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById(b.dataset.tab).classList.add('active');
+  };
+});
+
+/* =====================================================
+   GENERADOR
+===================================================== */
+const MM=11.811; // px por mm a 300dpi
+let NPATCHES=21;             // nº de pasos activo (21 por defecto; 31 opcional)
+let genData=null;
+
+/* nº de pasos elegido en el generador (21/31); 21 si el selector no existe aún */
+function genSteps(){
+  const el=document.getElementById('g_steps');
+  return el ? (+el.value) : NPATCHES;
+}
+/* regla de columnas: 21→3, más pasos→4. Punto único de decisión, compartido
+   por generador y analizador, para que la geometría sea idéntica en ambos. */
+function colsFor(n){ return n<=21 ? 3 : 4; }
+
+function buildSteps(){
+  const n=genSteps();
+  const arr=[];
+  for(let i=0;i<n;i++){
+    const inputVal=1-i/(n-1); // lineal en valor de gris
+    arr.push({idx:i, input:inputVal});
+  }
+  return {n,arr};
+}
+
+/* ---- disposición: columnas derivadas del nº de pasos (21→3, 31→4), filas
+   derivadas de columnas, tamaño de parche calculado para caber en A4 con
+   proporción 4:3 fija. Para 21 pasos da 3×7 a 40×30 mm (diseño validado);
+   para 31 da 4×8 a ~34.5×25.9 mm. El bloque de PARCHES (no el bloque-con-
+   numeración) se centra en la hoja. ---- */
+const A4W=210, A4H=297, MARGIN=14, HEADER=14, NUMW=8, GUTTER=2;
+const SACR=8;              // alto de la banda de sacrificio (mm): una sola barra
+                           // superior que absorbe el sobredepósito de tóner del
+                           // borde de entrada al fusor (láser). Opcional.
+const PATCH_ASPECT=40/30;  // proporción de parche fija (4:3), referencia única
+const PH_MAX=30;           // alto de parche ideal: no crecer por encima aunque sobre sitio
+const PH_MIN=16;           // suelo: por debajo la ventana de medición incomoda
+const SIDE_PAD=3;          // aire lateral mínimo del área de parches al margen (mm)
+
+/* Calcula la disposición para n pasos, cols columnas y si hay banda de
+   sacrificio (reserva el alto de UNA barra superior). Devuelve tamaños en mm
+   y el origen (ox,oy) ya centrado sobre el ÁREA DE PARCHES. `fits` avisa si,
+   ni siquiera al suelo PH_MIN, el conjunto cabe (para que el generador pueda
+   advertir en vez de dibujar algo cortado). */
+function computeLayout(n, cols=colsFor(n), sacrifice=false){
+  const rows=Math.ceil(n/cols);   // llenado por columnas; última puede ir incompleta
+  const bandReserve=sacrifice ? (SACR+GUTTER) : 0;  // una sola banda
+  const availH=(A4H-HEADER-MARGIN)-bandReserve;
+  // ancho útil: entre márgenes, menos el aire lateral a cada lado.
+  const availW=(A4W-2*MARGIN)-2*SIDE_PAD;
+  // alto de parche: limitado por filas (alto) y por columnas (ancho); manda el menor.
+  // En ancho, lo que se consume de verdad es blockW = cols*(pw+NUMW)+(cols-1)*GUTTER:
+  // el hueco de numeración cuenta en TODAS las columnas, incluida la última, cuyos
+  // números se dibujan a la derecha del último parche y también deben caber dentro
+  // del margen. Despejando pw de blockW<=availW y pasando a alto vía PATCH_ASPECT.
+  let phmm=Math.min(PH_MAX, (availH-(rows-1)*GUTTER)/rows);
+  phmm=Math.min(phmm, ((availW-(cols-1)*GUTTER)/cols - NUMW)/PATCH_ASPECT);
+  // suelo de legibilidad: por debajo de PH_MIN la ventana de medición incomoda.
+  // NO se sube el parche hasta el suelo (eso sacaría el bloque de la hoja en
+  // silencio); se deja el valor real y se marca `fits=false` para que el
+  // generador pueda advertir.
+  const tooSmall = phmm < PH_MIN;
+  const pwmm=phmm*PATCH_ASPECT;
+  // ancho total del bloque (incluye el hueco de numeración de cada columna)
+  const blockW=cols*(pwmm+NUMW)+(cols-1)*GUTTER;
+  // ancho VISUAL de parches: del borde izq del 1er parche al borde der del último,
+  // SIN el hueco de numeración sobrante de la última columna → esto es lo que se centra
+  const patchSpanW=cols*pwmm+(cols-1)*(NUMW+GUTTER);
+  const blockH=rows*phmm+(rows-1)*GUTTER;
+  // Centrado horizontal por patchSpanW: lo que se centra es la MANCHA DE
+  // PARCHES (lo que el ojo lee como "la cuña"), no el bloque-con-numeración.
+  // Cada columna reserva NUMW a su derecha para el número, y ese hueco sobra
+  // en la última columna: centrar por blockW lo contaría y desplazaría los
+  // parches NUMW/2 a la izquierda del centro óptico de la hoja.
+  // Contrapartida: los números de la última columna se comen parte del aire
+  // lateral (SIDE_PAD), por eso el chequeo de borde derecho de `fits` los
+  // valida contra MARGIN-SIDE_PAD y no contra MARGIN a secas.
+  const ox=(A4W-patchSpanW)/2;
+  // centrado vertical DENTRO del espacio útil, que ya excluye la banda:
+  // la banda ocupa su reserva arriba y el bloque se centra en lo que queda.
+  const oy=HEADER+bandReserve+(availH-blockH)/2;
+  // ¿cabe todo? Se comprueba cada borde por separado:
+  //  - izquierda: la mancha de parches no invade el margen (SIDE_PAD de aire)
+  //  - derecha: el borde de los NÚMEROS de la última columna (no el del último
+  //    parche): se les permite ocupar el aire lateral, que para eso está, pero
+  //    no rebasar el margen físico de impresión
+  //  - arriba: la banda de sacrificio no invade la cabecera
+  //  - abajo: el bloque no rebasa el margen inferior
+  //  - y el parche no ha quedado por debajo del suelo de legibilidad
+  const barTop = oy - GUTTER - SACR;
+  const fits = (ox>=MARGIN-SIDE_PAD-0.01)
+            && (ox+patchSpanW+NUMW<=A4W-MARGIN+SIDE_PAD+0.01)
+            && (!sacrifice || barTop>=HEADER-0.01)
+            && (oy+blockH<=A4H-MARGIN+0.01)
+            && !tooSmall;
+  return {cols,rows,pwmm,phmm,blockW,patchSpanW,blockH,ox,oy,fits,tooSmall};
+}
+
+/* posición (en mm, RELATIVA al origen ox,oy del bloque) del paso idx */
+function patchPos(idx, L){
+  const col=Math.floor(idx/L.rows);
+  const row=idx%L.rows;
+  const x=col*((L.pwmm+NUMW)+GUTTER);
+  const y=row*(L.phmm+GUTTER);
+  return {col,row,x,y};
+}
+
+function renderWedge(){
+  genData=buildSteps();
+  const {n,arr}=genData;
+  const neg=document.getElementById('g_neg').checked;
+  const nums=document.getElementById('g_nums').checked;
+  const sacr=document.getElementById('g_sacr').checked;
+  const label=document.getElementById('g_label').value;
+
+  const L=computeLayout(n, colsFor(n), sacr);
+  genData.layout=L;
+
+  const cv=document.getElementById('wedgeCanvas');
+  const ctx=cv.getContext('2d');
+  const S=MM;
+  cv.width=A4W*S; cv.height=A4H*S;
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,cv.width,cv.height);
+
+  const ox=L.ox*S, oy=L.oy*S;
+  // cabecera centrada horizontalmente
+  ctx.fillStyle='#000'; ctx.font=`${4*S}px monospace`;
+  const stepsWord = t('word_steps');
+  const head=`${label} · ${n} ${stepsWord} · ${L.cols}×${L.rows}`+(neg?' · NEG':'');
+  ctx.textAlign='center'; ctx.fillText(head, (A4W/2)*S, (HEADER*0.82)*S); ctx.textAlign='left';
+
+  // banda de sacrificio (negro pleno = máximo tóner, ceba el fusor); opcional
+  if(sacr){
+    ctx.fillStyle='#000';
+    sacrificialBars(L).forEach(bar=>{
+      ctx.fillRect(bar.x*S, bar.y*S, bar.w*S, bar.h*S);
+    });
+  }
+
+  arr.forEach(s=>{
+    let v=s.input; if(neg) v=1-v;
+    const g=Math.round(v*255);
+    const p=patchPos(s.idx,L);
+    const x=ox+p.x*S, y=oy+p.y*S, w=L.pwmm*S, h=L.phmm*S;
+    ctx.fillStyle=`rgb(${g},${g},${g})`;
+    ctx.fillRect(x,y,w,h);
+    ctx.strokeStyle = neg ? 'rgba(0,0,0,0.25)' : '#000';
+    ctx.lineWidth = neg ? 1 : 1.2;
+    ctx.strokeRect(x,y,w,h);
+    if(nums){
+      ctx.fillStyle='#000'; ctx.font=`${3.4*S}px monospace`;
+      ctx.fillText(s.idx, x+w+1.4*S, y+h/2+1.2*S);
+    }
+  });
+
+  const meta=document.getElementById('g_meta');
+  meta.textContent=
+    t('metaGen')(n, L.cols, L.rows, L.pwmm.toFixed(1), L.phmm.toFixed(1), neg);
+  // `fits` deja de ser decorativo: si la disposición no cabe en A4 con los
+  // márgenes previstos, se avisa aquí en vez de dibujar algo cortado en silencio.
+  if(!L.fits){
+    meta.textContent += ' · ' + t('layoutWarn');
+    meta.style.color = 'var(--warn)';
+  } else {
+    meta.style.color = '';
+  }
+
+  document.getElementById('g_table').textContent=
+    arr.map(s=>{const p=patchPos(s.idx,L);return `#${String(s.idx).padStart(2)}  col${p.col} fila${p.row}  entrada=${(s.input*100).toFixed(1)}%`;}).join('\n');
+}
+document.getElementById('g_render').onclick=renderWedge;
+renderWedge();
+
+/* banda de sacrificio: UNA sola barra negra superior, pegada al bloque
+   (gap = GUTTER por encima de la fila 0). Ceñida al ANCHO DE PARCHES
+   (patchSpanW), no al bloque-con-numeración, para no cubrir los números
+   de la derecha. Ceba el fusor en la orientación de entrada de la hoja. */
+function sacrificialBars(L){
+  const gap=GUTTER;
+  return [
+    {x:L.ox, y:L.oy - gap - SACR, w:L.patchSpanW, h:SACR}
+  ];
+}
+
+document.getElementById('g_png').onclick=()=>{
+  const a=document.createElement('a');
+  a.download=(document.getElementById('g_label').value||'cuna')+'.png';
+  a.href=document.getElementById('wedgeCanvas').toDataURL('image/png');a.click();
+};
+
+document.getElementById('g_pdf').onclick=()=>{
+  // jsPDF es la única dependencia externa (CDN); si no cargó (sin red, CDN
+  // caído, bloqueo del navegador) el PDF no puede generarse. Se avisa y se
+  // remite al PNG, que no necesita jsPDF. No se falla en silencio.
+  if(!window.jspdf || !window.jspdf.jsPDF){
+    alert(t('pdfNoLib'));
+    return;
+  }
+  if(!genData) renderWedge();
+  const {n,arr,layout:L}=genData;
+  const neg=document.getElementById('g_neg').checked;
+  const nums=document.getElementById('g_nums').checked;
+  const sacr=document.getElementById('g_sacr').checked;
+  const label=document.getElementById('g_label').value;
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'mm',format:'a4'});
+  const ox=L.ox, oy=L.oy;
+  doc.setFont('courier','normal');
+  doc.setFontSize(11);
+  const stepsW = t('word_steps'), linW = t('word_linear');
+  let head=`${label} · ${n} ${stepsW} · ${L.cols}×${L.rows} · ${linW}`+(neg?' · NEG':'');
+  doc.text(head.slice(0,80), A4W/2, 11, {align:'center'});
+  doc.setFontSize(7);
+  doc.text(t('pdfSub'), A4W/2, 15, {align:'center'});
+
+  // banda de sacrificio (negro pleno) para cebar el fusor; opcional, una barra superior
+  if(sacr){
+    doc.setFillColor(0,0,0);
+    sacrificialBars(L).forEach(bar=>{
+      doc.rect(bar.x, bar.y, bar.w, bar.h, 'F');
+    });
+  }
+
+  arr.forEach(s=>{
+    let v=s.input; if(neg) v=1-v;
+    const g=Math.round(v*255);
+    const p=patchPos(s.idx,L);
+    const x=ox+p.x, y=oy+p.y;
+    doc.setFillColor(g,g,g);
+    if(neg){ doc.setDrawColor(180);doc.setLineWidth(0.1);doc.rect(x,y,L.pwmm,L.phmm,'FD'); }
+    else   { doc.setDrawColor(0);  doc.setLineWidth(0.25);doc.rect(x,y,L.pwmm,L.phmm,'FD'); }
+    if(nums){
+      doc.setTextColor(0);doc.setFontSize(6);
+      doc.text(String(s.idx), x+L.pwmm+1.2, y+L.phmm/2+1);
+    }
+  });
+
+  doc.save((label||'cuna')+'.pdf');
+};
+
+/* =====================================================
+   ANALIZADOR
+===================================================== */
+/* Índices de paso descartados por el usuario (clic en el panel de respuesta).
+   Se declara AQUÍ, al principio del analizador, y no junto al resto de la
+   lógica de descarte, porque applyStepsConfig() la limpia y esa función se
+   ejecuta durante la carga del script. Con `let`, usarla antes de esta línea
+   lanza ReferenceError por la zona muerta temporal — y `typeof` NO sirve de
+   guarda ahí (también lanza, a diferencia de lo que ocurre con `var`). */
+let discarded = new Set();
+
+const drop=document.getElementById('dropZone');
+const fileInput=document.getElementById('fileInput');
+const stage=document.getElementById('stage');
+const scanCv=document.getElementById('scanCanvas');
+const sctx=scanCv.getContext('2d');
+let img=null, imgScale=1, measured=null;
+
+drop.onclick=()=>fileInput.click();
+drop.ondragover=e=>{e.preventDefault();drop.classList.add('over')};
+drop.ondragleave=()=>drop.classList.remove('over');
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove('over');loadFile(e.dataTransfer.files[0])};
+fileInput.onchange=e=>loadFile(e.target.files[0]);
+
+function loadFile(f){
+  if(!f) return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    img=new Image();
+    img.onload=()=>{
+      const maxW=720; imgScale=Math.min(1,maxW/img.width);
+      scanCv.width=img.width*imgScale; scanCv.height=img.height*imgScale;
+      sctx.drawImage(img,0,0,scanCv.width,scanCv.height);
+      stage.classList.add('show');
+      resetMarks();
+    };
+    img.src=ev.target.result;
+  };
+  r.readAsDataURL(f);
+}
+
+// disposición del analizador: debe coincidir con la del generador para el
+// mismo nº de pasos. Se recalcula cuando cambia el selector de pasos (a_steps).
+// La banda de sacrificio NO afecta a la geometría de los parches (es una barra
+// fuera del bloque), así que para medir da igual si la cuña se imprimió con o
+// sin ella: se calcula el layout sin banda.
+let A_LAYOUT, A_COLS, A_ROWS, A_TOTAL;
+// nº real de pasos por columna (la última puede ir incompleta)
+function patchesInCol(c){ return Math.max(0, Math.min(A_ROWS, A_TOTAL - c*A_ROWS)); }
+// aserción de coherencia: las columnas deben cubrir exactamente los pasos,
+// y ninguna columna puede quedar vacía (rompería el marcado y la interpolación).
+function assertLayout(){
+  let sum=0, empty=false;
+  for(let c=0;c<A_COLS;c++){ const p=patchesInCol(c); sum+=p; if(p<=0) empty=true; }
+  if(sum!==A_TOTAL || empty){
+    console.error(`Disposición incoherente: ${A_COLS} columnas × ${A_ROWS} filas no reparten ${A_TOTAL} pasos (suma=${sum}, columna vacía=${empty}). Revisa colsFor / nº de pasos.`);
+  }
+}
+/* aplica el nº de pasos elegido en el analizador: recalcula el layout,
+   reinicia marcas en curso (un cambio de geometría invalida los clics
+   previos) y repinta la info de rejilla. */
+function applyStepsConfig(){
+  const el=document.getElementById('a_steps');
+  const n = el ? (+el.value) : 21;
+  A_TOTAL = n;
+  A_LAYOUT = computeLayout(n, colsFor(n), false);
+  A_COLS = A_LAYOUT.cols;
+  A_ROWS = A_LAYOUT.rows;
+  assertLayout();
+  // cambiar el nº de pasos invalida cualquier descarte previo: los índices
+  // apuntaban a la geometría anterior. Sin esto, un descarte hecho con 21
+  // pasos seguiría marcado (y desfasado) al pasar a 31 sin volver a medir.
+  // `discarded` se declara ARRIBA (antes de esta función) precisamente porque
+  // applyStepsConfig() se ejecuta también durante la carga: con `let`, ni
+  // siquiera `typeof` sirve de guarda (lanza ReferenceError en zona muerta).
+  discarded.clear();
+  if(typeof updateDiscardClearBtn==='function') updateDiscardClearBtn();
+  if(typeof resetMarks==='function') resetMarks();
+  const gi=document.getElementById('a_gridinfo');
+  if(gi) gi.textContent = t('gridinfo')(A_TOTAL, A_COLS, A_ROWS);
+}
+
+// puntos por columna: pairs = [[start,end], ...] uno por columna
+let pairs=[], pending=null;
+function resetMarks(){
+  pairs=[];pending=null;
+  if(img) redrawMarks();
+  updateHint();
+  document.getElementById('a_measure').disabled=true;
+}
+document.getElementById('a_reset').onclick=resetMarks;
+// al cambiar sentido u homogeneización, redibuja si ya hay medición
+['a_invert','a_smooth','a_prefilter'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el) el.onchange=()=>{ if(measured) drawResults(measured.rows); };
+});
+// selector de nº de pasos: recalcula la disposición y reinicia el marcado
+(function wireStepsSelect(){
+  const el=document.getElementById('a_steps');
+  if(el) el.onchange=applyStepsConfig;
+})();
+// inicializa la disposición del analizador (21 por defecto)
+applyStepsConfig();
+
+function updateHint(){
+  const done=pairs.length;
+  const h=document.getElementById('clickHint');
+  if(!h) return;
+  if(done>=A_COLS){h.innerHTML=t('allmarked');return;}
+  const np=patchesInCol(done);
+  if(!pending) h.innerHTML=t('colFirst')(done,A_COLS,np);
+  else h.innerHTML=t('colLast')(done,A_COLS);
+}
+
+scanCv.onclick=e=>{
+  if(!img) return;
+  if(pairs.length>=A_COLS) return;
+  const rect=scanCv.getBoundingClientRect();
+  const x=(e.clientX-rect.left)*(scanCv.width/rect.width);
+  const y=(e.clientY-rect.top)*(scanCv.height/rect.height);
+  if(!pending){ pending={x,y}; }
+  else { pairs.push([pending,{x,y}]); pending=null;
+    if(pairs.length>=A_COLS) document.getElementById('a_measure').disabled=false; }
+  redrawMarks();
+  updateHint();
+};
+function redraw(){sctx.drawImage(img,0,0,scanCv.width,scanCv.height);}
+const COLCLR=['#b8702e','#1c3f6e','#2f6b46','#9a4524','#6b4c9a','#356b8c'];
+
+/* ventana en % del paso (del deslizador) */
+function winPct(){ return (+document.getElementById('a_win').value)/100; }
+
+/* centros y tamaño de ventana (en coords de CANVAS mostrado) para una columna ya marcada.
+   Ventana RECTANGULAR proporcional al paso (pwmm/phmm). Devuelve {centers:[{x,y}], hw, hh}. */
+function colWindows(colIdx){
+  const [a,b]=pairs[colIdx];
+  const np=patchesInCol(colIdx);
+  const centers=[];
+  for(let i=0;i<np;i++){
+    const t = np>1 ? i/(np-1) : 0;
+    centers.push({x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t});
+  }
+  // separación vertical entre pasos (en canvas) ~ alto del paso
+  const span=Math.hypot(b.x-a.x,b.y-a.y);
+  const stepH = np>1 ? span/(np-1) : span;
+  const pct=winPct();
+  const hh=stepH*pct/2;                       // semialto de ventana
+  const hw=hh*(A_LAYOUT.pwmm/A_LAYOUT.phmm);   // semiancho, proporcional al paso (40/30)
+  return {centers,hw,hh};
+}
+
+/* redibuja imagen + marcas + recuadros de ventana */
+function redrawMarks(){
+  if(!img) return;
+  redraw();
+  // columnas completas: línea, puntos y recuadros de ventana
+  pairs.forEach((pr,ci)=>{
+    const [a,b]=pr;
+    sctx.strokeStyle=COLCLR[ci%COLCLR.length];sctx.lineWidth=2;
+    sctx.beginPath();sctx.moveTo(a.x,a.y);sctx.lineTo(b.x,b.y);sctx.stroke();
+    const {centers,hw,hh}=colWindows(ci);
+    sctx.strokeStyle=COLCLR[ci%COLCLR.length];sctx.lineWidth=1.2;
+    centers.forEach(c=>sctx.strokeRect(c.x-hw,c.y-hh,hw*2,hh*2));
+    [a,b].forEach(p=>{sctx.fillStyle=COLCLR[ci%COLCLR.length];sctx.beginPath();sctx.arc(p.x,p.y,4,0,7);sctx.fill();
+      sctx.strokeStyle='#fff';sctx.lineWidth=1.5;sctx.stroke();});
+  });
+  // punto pendiente (primer clic de una columna sin cerrar)
+  if(pending){sctx.fillStyle=COLCLR[pairs.length%COLCLR.length];sctx.beginPath();
+    sctx.arc(pending.x,pending.y,4,0,7);sctx.fill();sctx.strokeStyle='#fff';sctx.lineWidth=1.5;sctx.stroke();}
+}
+
+// deslizador: etiqueta + redibujo en vivo
+document.getElementById('a_win').oninput=()=>{
+  document.getElementById('a_winlbl').textContent=document.getElementById('a_win').value+'%';
+  redrawMarks();
+};
+
+// mediana de un canal sobre una ventana RECTANGULAR (semianchos hw,hh en px de imagen nativa)
+function sampleMedian(octx, cx, cy, hw, hh, ch){
+  const x0=Math.max(0,Math.round(cx-hw)), y0=Math.max(0,Math.round(cy-hh));
+  const w=Math.max(1,Math.round(hw*2)), h=Math.max(1,Math.round(hh*2));
+  const data=octx.getImageData(x0,y0,w,h).data;
+  const vals=[];
+  for(let p=0;p<data.length;p+=4){
+    const R=data[p],G=data[p+1],B=data[p+2];
+    let val; if(ch==='r')val=R;else if(ch==='g')val=G;else if(ch==='b')val=B;
+    else val=0.299*R+0.587*G+0.114*B;
+    vals.push(val);
+  }
+  if(!vals.length) return 0;
+  vals.sort((a,b)=>a-b);
+  const m=vals.length>>1;
+  return (vals.length&1) ? vals[m] : (vals[m-1]+vals[m])/2;
+}
+
+document.getElementById('a_measure').onclick=()=>{
+  const ch=document.getElementById('a_channel').value;
+  const off=document.createElement('canvas');off.width=img.width;off.height=img.height;
+  const octx=off.getContext('2d');octx.drawImage(img,0,0);
+
+  const rows=[];
+  let idx=0;
+  for(let c=0;c<A_COLS;c++){
+    const {centers,hw,hh}=colWindows(c);       // en coords de canvas mostrado
+    // a píxeles de imagen nativa
+    const HW=Math.max(2,hw/imgScale), HH=Math.max(2,hh/imgScale);
+    for(let i=0;i<centers.length;i++){
+      const cx=centers[i].x/imgScale, cy=centers[i].y/imgScale;
+      const med=sampleMedian(octx,cx,cy,HW,HH,ch);
+      const refl=med/255;
+      const D=-Math.log10(Math.max(refl,0.002));
+      rows.push({idx:idx++,col:c,mean:med,refl,D});
+    }
+  }
+  const Dmin=Math.min(...rows.map(r=>r.D));
+  rows.forEach(r=>r.Dnorm=r.D-Dmin);
+  measured={n:rows.length,rows};
+  discarded.clear();                 // nueva medición: empieza sin descartes
+  drawResults(rows);
+  fillTable(rows);
+  document.getElementById('results').style.display='block';
+  ['a_acv','a_csv','a_cube'].forEach(id=>document.getElementById(id).disabled=false);
+  if(typeof updateDiscardClearBtn==='function') updateDiscardClearBtn();
+};
+
+/* dibuja un panel con ejes, rejilla y diagonal de referencia */
+function drawPanel(c,W,H,m,xlab,ylab){
+  c.fillStyle='#fff';c.fillRect(0,0,W,H);
+  const L=m, R=W-m*0.5, T=m*0.5, B=H-m;
+  c.strokeStyle='#e3dcc8';c.lineWidth=1;
+  for(let g=0;g<=4;g++){
+    const x=L+(R-L)*g/4, y=T+(B-T)*g/4;
+    c.beginPath();c.moveTo(x,T);c.lineTo(x,B);c.stroke();
+    c.beginPath();c.moveTo(L,y);c.lineTo(R,y);c.stroke();
+  }
+  c.strokeStyle='#c7bca2';c.lineWidth=1.2;c.strokeRect(L,T,R-L,B-T);
+  // diagonal de referencia
+  c.strokeStyle='#9aa6b5';c.lineWidth=1;c.setLineDash([4,3]);
+  c.beginPath();c.moveTo(L,B);c.lineTo(R,T);c.stroke();c.setLineDash([]);
+  c.fillStyle='#46566b';c.font='9px monospace';
+  c.fillText(xlab,(L+R)/2-xlab.length*2.6,H-6);
+  c.save();c.translate(11,(T+B)/2+ylab.length*2.6);c.rotate(-Math.PI/2);c.fillText(ylab,0,0);c.restore();
+  return {L,R,T,B};
+}
+
+function drawResults(rows){
+  const n=rows.length;
+  const rawTrue=rows.map(r=>r.Dnorm);              // densidades medidas originales
+  const rawRep=densitiesWithDiscard();           // con puntos descartados reconstruidos
+  const smoothOn=document.getElementById('a_smooth') && document.getElementById('a_smooth').checked;
+  const preOn=prefilterOn();
+  // curva sólida = lo que realmente alimenta el LUT (prefiltro y/o homogeneizado)
+  const eff = (smoothOn||preOn) ? effectiveDensities() : null;
+  // misma escala que el LUT exportado: normaliza por el Dmax efectivo.
+  // Se toma también el máximo de la cruda para que, si sobresale del efectivo,
+  // no se salga del panel al dibujarla de fondo.
+  const Dmax=Math.max(effectiveDmax(), Math.max(...rawTrue), Math.max(...rawRep), 0.0001);
+  // X = gris del negativo (0=opaco .. 1=transparente) = idx/(n-1)
+  // se dibujan los puntos REPARADOS (los descartados en su posición reconstruida),
+  // pero se recuerda su valor medido original para pintarlos distinto.
+  const ptsRaw=rawRep.map((d,i)=>({x:i/(n-1), d:d/Dmax, sac:discarded.has(i), orig:rawTrue[i]/Dmax}));
+  const ptsHom=eff?eff.map((d,i)=>({x:i/(n-1), d:d/Dmax})):null;
+
+  // ----- Panel 1: respuesta medida del proceso -----
+  let cv=document.getElementById('respCanvas');let c=cv.getContext('2d');
+  let ax=drawPanel(c,cv.width,cv.height,38,t('axis_gray'),t('axis_density'));
+  const X=u=>ax.L+(ax.R-ax.L)*u, Y=v=>ax.B-(ax.B-ax.T)*v;
+  // guarda geometría de puntos para el hit-testing del clic (descarte)
+  _respHit={ax, pts: ptsRaw.map(p=>({sx:X(p.x), sy:Y(p.sac?p.orig:p.d)}))};
+
+  if(ptsHom){
+    // cruda tenue de fondo
+    c.strokeStyle='rgba(28,63,110,0.30)';c.lineWidth=1;c.beginPath();
+    ptsRaw.forEach((p,i)=>{i?c.lineTo(X(p.x),Y(p.d)):c.moveTo(X(p.x),Y(p.d));});c.stroke();
+    // homogeneizada sólida encima
+    c.strokeStyle='#1c3f6e';c.lineWidth=2;c.beginPath();
+    ptsHom.forEach((p,i)=>{i?c.lineTo(X(p.x),Y(p.d)):c.moveTo(X(p.x),Y(p.d));});c.stroke();
+  } else {
+    c.strokeStyle='#1c3f6e';c.lineWidth=2;c.beginPath();
+    ptsRaw.forEach((p,i)=>{i?c.lineTo(X(p.x),Y(p.d)):c.moveTo(X(p.x),Y(p.d));});c.stroke();
+  }
+
+  // dibuja los puntos: sanos rellenos; descartados en su posición ORIGINAL
+  // medida, tachados con una cruz roja (para ver qué se descartó y dónde estaba)
+  drawRawPoints(c,X,Y,ptsRaw);
+
+  // ----- Panel 2: corrección aplicada al negativo (entrada->salida) -----
+  const lut=correctionLUT(); // 256 valores salida para entrada 0..255
+  cv=document.getElementById('corrCanvas');c=cv.getContext('2d');
+  ax=drawPanel(c,cv.width,cv.height,38,t('axis_neg_orig'),t('axis_neg_corr'));
+  const X2=u=>ax.L+(ax.R-ax.L)*u, Y2=v=>ax.B-(ax.B-ax.T)*v;
+  c.strokeStyle='#b8702e';c.lineWidth=2;c.beginPath();
+  for(let k=0;k<256;k++){const u=k/255,v=lut[k]/255;k?c.lineTo(X2(u),Y2(v)):c.moveTo(X2(u),Y2(v));}
+  c.stroke();
+}
+
+/* geometría de los puntos del panel de respuesta en coords de canvas,
+   para el hit-testing del clic de descarte. La rellena drawResults(). */
+let _respHit=null;
+
+/* dibuja los puntos de datos: sanos como círculos rellenos; descartados
+   en su posición ORIGINAL medida (no la reconstruida), como círculo hueco
+   tachado con una cruz, para que se vea qué se descartó y dónde estaba. */
+function drawRawPoints(c,X,Y,ptsRaw){
+  const baseCol = '#1c3f6e';
+  ptsRaw.forEach(p=>{
+    if(p.sac){
+      // posición original medida
+      const px=X(p.x), py=Y(p.orig);
+      c.strokeStyle='#9a4524'; c.fillStyle='#fff'; c.lineWidth=1.5;
+      c.beginPath();c.arc(px,py,3.2,0,7);c.fill();c.stroke();
+      // cruz de tachado
+      c.strokeStyle='#9a4524';c.lineWidth=1.3;
+      c.beginPath();
+      c.moveTo(px-4.2,py-4.2);c.lineTo(px+4.2,py+4.2);
+      c.moveTo(px+4.2,py-4.2);c.lineTo(px-4.2,py+4.2);
+      c.stroke();
+    } else {
+      c.fillStyle=baseCol;c.beginPath();c.arc(X(p.x),Y(p.d),2.5,0,7);c.fill();
+    }
+  });
+}
+
+/* clic en el panel de respuesta: alterna el descarte del punto más cercano.
+   Umbral de proximidad razonable (14 px) para evitar descartes accidentales. */
+(function wireDiscardClick(){
+  const cv=document.getElementById('respCanvas');
+  if(!cv) return;
+  cv.style.cursor='pointer';
+  cv.addEventListener('click',e=>{
+    if(!measured || !_respHit) return;
+    const rect=cv.getBoundingClientRect();
+    const mx=(e.clientX-rect.left)*(cv.width/rect.width);
+    const my=(e.clientY-rect.top)*(cv.height/rect.height);
+    let best=-1, bestD=1e9;
+    _respHit.pts.forEach((p,i)=>{
+      const d=Math.hypot(p.sx-mx, p.sy-my);
+      if(d<bestD){ bestD=d; best=i; }
+    });
+    if(best>=0 && bestD<=14){
+      if(discarded.has(best)) discarded.delete(best);
+      else discarded.add(best);
+      drawResults(measured.rows);
+      fillTable(measured.rows);
+      updateDiscardClearBtn();
+    }
+  });
+})();
+
+/* muestra u oculta el botón de restaurar según haya descartes */
+function updateDiscardClearBtn(){
+  const b=document.getElementById('a_discardclear');
+  if(b) b.style.display = discarded.size>0 ? 'block' : 'none';
+}
+(function wireDiscardClear(){
+  const b=document.getElementById('a_discardclear');
+  if(b) b.onclick=()=>{ resetDiscard(); updateDiscardClearBtn(); };
+})();
+
+
+function fillTable(rows){
+  const tb=document.getElementById('dataTable');
+  tb.innerHTML=`<tr><th>${t('tbl_step')}</th><th>${t('tbl_col')}</th><th>${t('tbl_mean')}</th><th>${t('tbl_refl')}</th><th>${t('tbl_D')}</th></tr>`+
+    rows.map(r=>{
+      const sac=discarded.has(r.idx);
+      const style=sac?' style="opacity:.5;text-decoration:line-through;color:var(--warn)"':'';
+      const mark=sac?' ✕':'';
+      return `<tr${style}><td>${r.idx}${mark}</td><td>${r.col}</td><td>${r.mean.toFixed(0)}</td>`+
+        `<td>${(r.refl*100).toFixed(1)}</td><td>${r.Dnorm.toFixed(3)}</td></tr>`;
+    }).join('');
+}
+
+/* =====================================================
+   HOMOGENEIZADO DE LA CURVA: pesos + PAVA + PCHIP
+   Trabaja sobre el array de densidades por paso (índice 0..n-1).
+   Devuelve un array de densidades monótono y suave.
+===================================================== */
+
+/* pesos conservadores: los pasos que "no discriminan" (pendiente local ~0,
+   típico de luces aplastadas o sombras fundidas en Dmax) pesan menos, pero
+   NUNCA cero. Ante la duda, no recortar. */
+function stepWeights(d){
+  const n=d.length;
+  const slope=new Array(n);
+  for(let i=0;i<n;i++){
+    const a=d[Math.max(0,i-1)], b=d[Math.min(n-1,i+1)];
+    slope[i]=Math.abs(b-a);
+  }
+  const maxS=Math.max(...slope, 1e-6);
+  // peso entre 0.35 (extremo muerto) y 1 (discrimina bien); suave, sin ceros
+  return slope.map(s=>{
+    const r=s/maxS;               // 0..1
+    return 0.35 + 0.65*Math.sqrt(r); // sqrt = subir rápido desde 0, conservador
+  });
+}
+
+/* PAVA ponderado: proyección isotónica (no decreciente) de mínimos cuadrados.
+   Pool Adjacent Violators. ~20 líneas. */
+function pava(y, w){
+  const n=y.length;
+  // bloques: valor medio ponderado, peso total, nº de puntos
+  const val=[], wt=[], cnt=[];
+  for(let i=0;i<n;i++){ val.push(y[i]); wt.push(w[i]); cnt.push(1); }
+  let i=0;
+  while(i<val.length-1){
+    if(val[i]>val[i+1]+1e-12){
+      // viola monotonía: fusiona bloques i e i+1
+      const nw=wt[i]+wt[i+1];
+      const nv=(val[i]*wt[i]+val[i+1]*wt[i+1])/nw;
+      val[i]=nv; wt[i]=nw; cnt[i]+=cnt[i+1];
+      val.splice(i+1,1); wt.splice(i+1,1); cnt.splice(i+1,1);
+      if(i>0) i--;            // retrocede a revisar hacia atrás
+    } else i++;
+  }
+  // expande bloques a la longitud original
+  const out=[];
+  for(let k=0;k<val.length;k++) for(let j=0;j<cnt[k];j++) out.push(val[k]);
+  return out;
+}
+
+/* PCHIP: spline cúbica de Hermite que PRESERVA monotonía (Fritsch-Carlson).
+   xs estrictamente crecientes; devuelve función evaluadora f(x). */
+function pchip(xs, ys){
+  const n=xs.length;
+  if(n<2){ const c=ys[0]||0; return ()=>c; }
+  const h=[], delta=[];
+  for(let i=0;i<n-1;i++){ h[i]=xs[i+1]-xs[i]; delta[i]=(ys[i+1]-ys[i])/h[i]; }
+  const m=new Array(n);
+  m[0]=delta[0]; m[n-1]=delta[n-2];
+  for(let i=1;i<n-1;i++){
+    if(delta[i-1]*delta[i]<=0){ m[i]=0; }   // extremo local: pendiente 0 (mantiene monotonía)
+    else{
+      const w1=2*h[i]+h[i-1], w2=h[i]+2*h[i-1];
+      m[i]=(w1+w2)/(w1/delta[i-1]+w2/delta[i]); // media armónica ponderada
+    }
+  }
+  return function(x){
+    let i=n-2;
+    for(let k=0;k<n-1;k++){ if(x<=xs[k+1]){ i=k; break; } }
+    const t=(x-xs[i])/h[i], t2=t*t, t3=t2*t;
+    const h00=2*t3-3*t2+1, h10=t3-2*t2+t, h01=-2*t3+3*t2, h11=t3-t2;
+    return h00*ys[i]+h10*h[i]*m[i]+h01*ys[i+1]+h11*h[i]*m[i+1];
+  };
+}
+
+/* prefiltro suave opcional: promedio ponderado 3 puntos [0.25,0.5,0.25], una pasada,
+   extremos intactos. Reduce ruido de medición sin aplanar codos reales. */
+function prefilter(d){
+  const n=d.length;
+  if(n<3) return d.slice();
+  const out=d.slice();
+  for(let i=1;i<n-1;i++){
+    out[i]=0.25*d[i-1]+0.5*d[i]+0.25*d[i+1];
+  }
+  return out; // extremos (0 y n-1) sin tocar
+}
+function prefilterOn(){
+  const el=document.getElementById('a_prefilter');
+  return el && el.checked;
+}
+
+/* devuelve densidades homogeneizadas por paso (mismo orden que rows).
+   Aquí solo se aplica PAVA: da la versión monótona de los n anclajes
+   (21 o 31 según el selector), que es lo que se muestra como
+   puntos/tabla. El suavizado PCHIP real (curva continua entre anclajes)
+   se aplica en pchipSmoothFn(), usado por correctionLUT() para generar
+   los 256 puntos del LUT exportado.
+   Evaluar PCHIP en estos mismos n índices sería un no-op (todo
+   interpolador pasa exactamente por sus propios puntos de entrada),
+   así que no se hace aquí. */
+function homogenizeDensities(densRaw){
+  const src = prefilterOn() ? prefilter(densRaw) : densRaw;
+  const w=stepWeights(src);
+  return pava(src, w);                  // monótona no decreciente, n puntos
+}
+
+/* función continua densidad(gris 0..255) construida con PCHIP sobre los
+   n anclajes (índice de paso -> densidad). Esta es la curva "suave" real:
+   se evalúa a resolución fina en correctionLUT(), no solo en los n anclajes. */
+function pchipSmoothFn(dens){
+  const n=dens.length;
+  const xs=[], ys=[];
+  for(let i=0;i<n;i++){ xs.push(i/(n-1)*255); ys.push(dens[i]); }
+  return pchip(xs, ys);
+}
+
+/* =====================================================
+   DESCARTE MANUAL DE PUNTOS
+   -----------------------------------------------------
+   El usuario marca (clic en el panel) puntos que se salen
+   de la lógica del proceso por un artefacto conocido
+   (coating irregular, defecto de soporte, etc.). Un punto
+   descartado NO vota: se reemplaza su densidad por una
+   INTERPOLACIÓN LINEAL entre sus vecinos NO descartados,
+   reconstruyéndolo donde la tendencia local dice que debería
+   estar. Es peso-cero llevado al extremo, coherente con la
+   filosofía de stepWeights(). La monotonía del proceso hace
+   segura esta reconstrucción.
+   Extremos (0 o n-1): si se descartan, COPIAN el vecino sano
+   más próximo. No se extrapola con pendiente: podría salirse
+   del rango y romper la monotonía.
+===================================================== */
+/* (la declaración de `discarded` se movió al inicio del ANALIZADOR: la usa
+   applyStepsConfig(), que corre durante la carga. Ver allí.) */
+
+/* devuelve las densidades crudas con los puntos descartados reemplazados
+   por interpolación entre vecinos sanos. Es el ORIGEN de todo el pipeline:
+   tanto el panel como PAVA/PCHIP parten de aquí. */
+function densitiesWithDiscard(){
+  const raw = measured.rows.map(r=>r.Dnorm);
+  const n = raw.length;
+  if(!discarded.size) return raw.slice();
+  // índices sanos, ordenados
+  const good = [];
+  for(let i=0;i<n;i++) if(!discarded.has(i)) good.push(i);
+  if(good.length===0) return raw.slice();       // todo descartado: no tocar (caso absurdo)
+  if(good.length===1){                          // un solo sano: meseta a ese valor
+    return raw.map(()=>raw[good[0]]);
+  }
+  const out = raw.slice();
+  for(let i=0;i<n;i++){
+    if(!discarded.has(i)) continue;
+    // busca vecino sano a izquierda y derecha
+    let lo=-1, hi=-1;
+    for(let k=i-1;k>=0;k--) if(!discarded.has(k)){ lo=k; break; }
+    for(let k=i+1;k<n;k++) if(!discarded.has(k)){ hi=k; break; }
+    if(lo>=0 && hi>=0){
+      // interpolación lineal entre los dos vecinos sanos
+      const t=(i-lo)/(hi-lo);
+      out[i]=raw[lo]+(raw[hi]-raw[lo])*t;
+    } else if(lo>=0 && hi<0){
+      // extremo derecho descartado: copia el vecino sano (mantiene monotonía;
+      // extrapolar con pendiente puede pasarse del rango y romper la meseta).
+      out[i]=raw[lo];
+    } else if(hi>=0 && lo<0){
+      // extremo izquierdo descartado: copia el vecino sano (idem).
+      out[i]=raw[hi];
+    }
+  }
+  return out;
+}
+
+function resetDiscard(){
+  discarded.clear();
+  if(measured){ drawResults(measured.rows); fillTable(measured.rows); }
+}
+
+/* densidades efectivas por paso según los toggles */
+function effectiveDensities(){
+  let dens=densitiesWithDiscard();                   // parte de las densidades ya reparadas
+  const n=dens.length;
+  const smooth=document.getElementById('a_smooth') && document.getElementById('a_smooth').checked;
+  if(smooth) return homogenizeDensities(dens);         // el prefiltro se aplica dentro
+  if(prefilterOn()) return prefilter(dens);            // solo prefiltro, sin homogeneizar
+  return dens;
+}
+
+
+/* Dmax efectivo = máximo de la MISMA curva que alimenta el LUT.
+   Reproduce el muestreo (PCHIP fino si homogeneizado, anclajes si no) y la
+   monotonía de seguridad, para que el panel de respuesta y el LUT compartan
+   una única escala. Como la curva es no decreciente, el máximo es el último
+   punto tras forzar monotonía. */
+function effectiveDmax(){
+  const rows=measured.rows;
+  const n=rows.length;
+  const dens=effectiveDensities();
+  const smoothOn=document.getElementById('a_smooth') && document.getElementById('a_smooth').checked;
+  let last;
+  if(smoothOn){
+    const f=pchipSmoothFn(dens);
+    // Se muestrea IGUAL que correctionLUT() —en gris real g=k/(FINE-1)*255, no
+    // en el índice k a secas— para que el panel de respuesta y el LUT compartan
+    // escala pase lo que pase con el dominio de pchipSmoothFn(). Hoy k y g
+    // coinciden porque ese dominio es 0..255; muestrear en g lo hace robusto si
+    // algún día pchipSmoothFn() pasara a definirse en 0..1 o en índice de paso.
+    const FINE=256;
+    let mx=f(0);
+    for(let k=1;k<FINE;k++){ mx=Math.max(mx, f(k/(FINE-1)*255)); }
+    last=mx;
+  } else {
+    let mx=dens[0];
+    for(let i=1;i<n;i++) mx=Math.max(mx, dens[i]);
+    last=mx;
+  }
+  return last||0.0001;
+}
+
+function correctionLUT(){
+  const rows=measured.rows;
+  const n=rows.length;
+  const dens=effectiveDensities();          // cruda u homogeneizada según toggle
+  const smoothOn=document.getElementById('a_smooth') && document.getElementById('a_smooth').checked;
+  const inverted = document.getElementById('a_invert') && document.getElementById('a_invert').checked;
+
+  // pares (gris_negativo, densidad_copia) SIEMPRE en sentido natural.
+  // Si el homogeneizado está activo, se muestrea la curva PCHIP continua a
+  // resolución fina (no solo los n anclajes), que es la curva "suave" real
+  // que se ve en el panel de respuesta y la que debe alimentar el LUT.
+  // Si no, se interpola linealmente entre los n puntos crudos/prefiltrados,
+  // como antes.
+  let pairs;
+  if(smoothOn){
+    const FINE=256;
+    const f=pchipSmoothFn(dens);
+    pairs=[];
+    for(let k=0;k<FINE;k++){
+      const g=k/(FINE-1)*255;
+      pairs.push({g, d:f(g)});
+    }
+  } else {
+    pairs = dens.map((d,i)=>({ g:(i/(n-1))*255, d }))
+                .sort((a,b)=>a.g-b.g);
+  }
+
+  // garantía de monotonía (la homogeneizada ya debería serlo por construcción;
+  // red de seguridad para la cruda y por si el muestreo fino introduce algo)
+  const mono=[{g:pairs[0].g, d:pairs[0].d}];
+  for(let i=1;i<pairs.length;i++){
+    const prev=mono[mono.length-1];
+    mono.push({ g:pairs[i].g, d:Math.max(pairs[i].d, prev.d) });
+  }
+  const Dmax=mono[mono.length-1].d||1;
+
+  // inversa: dada densidad objetivo, ¿qué gris de negativo la produce?
+  // En tramos donde la densidad crece, interpola linealmente. En MESETAS
+  // (la respuesta no discrimina: sombras en Dmax, luces aplastadas) la inversa
+  // no es única; se devuelve el CENTRO de toda la meseta a ese nivel, no un
+  // extremo, para no introducir un escalón sesgado en el LUT. Se usa tolerancia
+  // porque Dtarget (continuo) rara vez iguala un nivel muestreado bit a bit.
+  function grisForDens(Dd){
+    const EPS=1e-9;
+    if(Dd<=mono[0].d) return mono[0].g;
+    if(Dd>=mono[mono.length-1].d) return mono[mono.length-1].g;
+    for(let i=0;i<mono.length-1;i++){
+      const a=mono[i], b=mono[i+1];
+      if(Dd>=a.d-EPS && Dd<=b.d+EPS){
+        if(b.d-a.d>EPS){                     // tramo ascendente: interpola
+          const t=(Dd-a.d)/(b.d-a.d);
+          // si aterriza justo en el borde superior y ahí arranca una meseta,
+          // el objetivo es el centro de esa meseta, no su primer gris
+          if(t>=1-EPS && i+2<mono.length && Math.abs(mono[i+2].d-b.d)<=EPS){
+            let hi=i+1;
+            while(hi<mono.length-1 && Math.abs(mono[hi+1].d-b.d)<=EPS) hi++;
+            return (b.g + mono[hi].g)/2;
+          }
+          return a.g + (b.g-a.g)*t;
+        }
+        // tramo plano a nivel ~Dd: extiende la meseta a ambos lados y toma el centro
+        let lo=i, hi=i+1;
+        const lvl=a.d;
+        while(lo>0 && Math.abs(mono[lo-1].d-lvl)<=EPS) lo--;
+        while(hi<mono.length-1 && Math.abs(mono[hi+1].d-lvl)<=EPS) hi++;
+        return (mono[lo].g + mono[hi].g)/2;
+      }
+    }
+    return mono[mono.length-1].g;
+  }
+
+  // 256 puntos: entrada gris de negativo deseado -> salida gris corregido
+  const lut=[];
+  for(let k=0;k<256;k++){
+    const Gd=k;
+    const Dtarget=Dmax*(Gd/255);     // densidad lineal deseada para ese gris
+    const Gr=grisForDens(Dtarget);   // gris real que la produce
+    lut.push(Math.round(Math.max(0,Math.min(255,Gr))));
+  }
+
+  // "Invertir sentido": espeja el LUT resultante sin romper su monotonía interna.
+  // lut_inv[k] = 255 - lut[255-k]. Sigue siendo una curva válida y monótona.
+  if(inverted){
+    const inv=[];
+    for(let k=0;k<256;k++) inv.push(255 - lut[255-k]);
+    return inv;
+  }
+  return lut;
+}
+
+/* ---- export .acv (Photoshop/Affinity) ---- */
+document.getElementById('a_acv').onclick=()=>{
+  const lut=correctionLUT();
+  // .acv (Photoshop): cada punto se almacena como (output, input), big-endian uint16.
+  const pts=16;const buf=[];
+  function u16(v){buf.push((v>>8)&255,v&255);}
+  u16(4);          // version
+  u16(1);          // nº de curvas (solo la compuesta)
+  u16(pts);
+  for(let i=0;i<pts;i++){
+    const input=Math.round(i/(pts-1)*255);
+    const output=lut[input];
+    u16(output); u16(input); // ORDEN CORRECTO: output primero, luego input
+  }
+  const bytes=new Uint8Array(buf);
+  const blob=new Blob([bytes],{type:'application/octet-stream'});
+  dl(blob,'cianotipia.acv');
+};
+
+/* ---- export csv ---- */
+document.getElementById('a_csv').onclick=()=>{
+  const rows=measured.rows;const lut=correctionLUT();
+  let csv='paso,media_0_255,reflectancia,densidad_rel,descartado\n';
+  rows.forEach(r=>csv+=`${r.idx},${r.mean.toFixed(1)},${r.refl.toFixed(4)},${r.Dnorm.toFixed(4)},${discarded.has(r.idx)?1:0}\n`);
+  csv+='\nLUT_input_0_255,output_0_255\n';
+  lut.forEach((v,i)=>csv+=`${i},${v}\n`);
+  dl(new Blob([csv],{type:'text/csv'}),'cianotipia.csv');
+};
+
+/* ---- export .cube 1D (Affinity: Adjustment → LUT → Load) ---- */
+document.getElementById('a_cube').onclick=()=>{
+  const lut=correctionLUT();const N=256;
+  let s='# Cianotipia · curva de correccion 1D\n';
+  s+='TITLE "cianotipia"\n';
+  s+='LUT_1D_SIZE '+N+'\n';
+  s+='DOMAIN_MIN 0.0 0.0 0.0\n';
+  s+='DOMAIN_MAX 1.0 1.0 1.0\n';
+  for(let i=0;i<N;i++){
+    const v=lut[i]/255;          // N=256 coincide con la tabla, sin remuestrear
+    const t=v.toFixed(6);
+    s+=`${t} ${t} ${t}\n`;
+  }
+  dl(new Blob([s],{type:'text/plain'}),'cianotipia.cube');
+};
+
+function dl(blob,name){
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=name;a.click();URL.revokeObjectURL(a.href);
+}
+
+/* aplica el idioma detectado al cargar */
+applyLang();
+</script>
+</body>
+</html>
