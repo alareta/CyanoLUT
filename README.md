@@ -31,9 +31,8 @@ Apply the LUT to your future negatives, in grayscale, before printing them.
 3. **Expose and develop** exactly as you do in production.
 4. **Dry for ≥24 h.** Prussian blue keeps intensifying through oxidation.
 5. **Scan with every automatic correction disabled.**
-6. **Load the scan**, select the *same* number of steps you generated, adjust the measurement window, and mark the columns left to right.
-7. **Review the curve** and export.
-8. **Apply the LUT** to a real negative in grayscale, print, expose. The corrected print should distribute its tones far better.
+6. **Select the *same* number of steps you generated, then load the scan**, adjust the measurement window, and mark the columns left to right — the tool tells you which step to click.
+7. **Apply the LUT** to a real negative in grayscale, print, expose. The corrected print should distribute its tones far better.
 
 ---
 

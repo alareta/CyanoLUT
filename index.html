@@ -58,7 +58,9 @@
       radial-gradient(circle at 80% 90%, rgba(184,112,46,.04), transparent 45%);
   }
   header{
-    padding:34px 28px 22px;border-bottom:1px solid var(--line);
+    /* mismo eje que <main> (max-width 1180, relleno 28): en pantallas anchas
+       cabecera, pestañas y paneles comparten borde izquierdo y derecho */
+    padding:34px max(28px, calc((100% - 1180px) / 2 + 28px)) 22px;border-bottom:1px solid var(--line);
     background:linear-gradient(180deg, var(--paper) 0%, var(--paper-edge) 100%);
   }
   .eyebrow{
@@ -74,7 +76,24 @@
     margin:4px 0 0;color:var(--ink-soft);letter-spacing:-.005em;
   }
   .sub{margin:8px 0 0;color:var(--ink-soft);max-width:62ch;font-size:15px}
-  nav{display:flex;gap:0;border-bottom:1px solid var(--line);background:var(--paper-edge)}
+  /* primera línea: eyebrow a la izquierda y selector de idioma a la derecha,
+     alineados por la línea base. wrap-reverse: si no caben (móvil), el
+     selector sube a su propia línea ENCIMA del eyebrow, como antes. */
+  .topline{display:flex;flex-wrap:wrap-reverse;align-items:baseline;gap:4px 16px;margin:0 0 8px}
+  .topline .eyebrow{margin:0}
+  #langSwitch{margin-left:auto;white-space:nowrap;font-family:var(--mono);font-size:12px}
+  #langSwitch .langbtn{font:inherit;letter-spacing:.08em;padding:0 3px}
+  /* pantallas anchas: la descripción pasa a la derecha de la identidad
+     (marca + título) en vez de debajo, para aprovechar el hueco lateral y
+     reducir el alto de la cabecera. La primera línea ocupa todo el ancho. */
+  @media(min-width:1000px){
+    header{display:grid;grid-template-columns:auto minmax(0,62ch);column-gap:56px;align-items:end}
+    header>.topline{grid-column:1 / -1;grid-row:1}
+    header>.brand{grid-column:1;grid-row:2}
+    header>h1{grid-column:1;grid-row:3}
+    header>.sub{grid-column:2;grid-row:2 / span 2;margin:0;align-self:end}
+  }
+  nav{display:flex;gap:0;border-bottom:1px solid var(--line);background:var(--paper-edge);padding:0 max(28px, calc((100% - 1180px) / 2 + 28px))}
   nav button{
     flex:0 0 auto;padding:14px 26px;border:none;background:none;cursor:pointer;
     font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
@@ -122,12 +141,24 @@
     background:var(--prussia);color:var(--paper);transition:.15s;
   }
   button.act:hover{background:var(--prussia-deep)}
-  button.ghost{background:none;border:1px solid var(--prussia);color:var(--prussia)}
+  button.ghost{background:none;border:1px solid var(--prussia);color:var(--prussia);
+    padding:10px 12px;border-radius:3px;cursor:pointer;transition:.15s;
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase}
   button.ghost:hover{background:var(--prussia);color:var(--paper)}
+  /* desactivado visible: antes un botón inactivo se veía igual que uno activo */
+  button.act:disabled,button.ghost:disabled{opacity:.45;cursor:not-allowed}
+  button.act:disabled:hover{background:var(--prussia)}
+  button.ghost:disabled:hover{background:none;color:var(--prussia)}
+  input[type=checkbox],input[type=range]{accent-color:var(--prussia)}
   .btn-stack{display:flex;flex-direction:column;gap:9px;margin-top:22px}
+  .btn-stack .act{margin-top:0}
   .viz{background:#fff;border:1px solid var(--line);border-radius:4px;padding:22px;min-height:300px}
   .wedge-wrap{overflow:auto;border:1px solid var(--line);background:#fff;padding:14px;border-radius:3px}
   canvas{display:block;max-width:100%;height:auto}
+  /* la hoja A4 entera a la vista (márgenes, centrado, banda); el PNG
+     descargado conserva su resolución de 300 ppp */
+  #wedgeCanvas{max-height:80vh;width:auto;margin:0 auto}
+  #g_meta{font-family:var(--mono);font-size:12px;color:var(--ink-soft);margin:2px 0 12px}
   table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12.5px;margin-top:6px}
   th,td{border:1px solid var(--line);padding:6px 8px;text-align:right}
   th{background:var(--paper-edge);color:var(--prussia-deep);text-transform:uppercase;
@@ -140,10 +171,36 @@
     border:2px dashed var(--line);border-radius:4px;padding:40px 20px;text-align:center;
     color:var(--ink-soft);cursor:pointer;transition:.15s;background:var(--paper)}
   .drop:hover,.drop.over{border-color:var(--accent);background:rgba(184,112,46,.05);color:var(--ink)}
-  .stage{position:relative;margin-top:18px;display:none}
+  .stage{position:relative;margin:18px auto 0;display:none}  /* centrado; su ancho = el del canvas (loadFile) */
   .stage.show{display:block}
   #scanCanvas{border:1px solid var(--line);cursor:crosshair;max-width:100%;touch-action:none}
-  .stage-hint{font-size:12.5px;color:var(--ink-soft);margin:8px 0}
+  .stage-hint{font-size:15px;color:var(--ink-soft);margin:8px 0;flex:1 1 240px}
+  /* barra sobre el escaneo: instrucción a la izquierda, botones a la derecha.
+     Con flex-wrap, en pantallas estrechas los botones bajan a su propia línea
+     y siguen alineados a la derecha (margin-left:auto). */
+  /* fila de configuración sobre la zona de carga, visible desde el principio:
+     nº de pasos + canal + info de rejilla. Orden de uso: configurar → cargar
+     → marcar → medir. Cambiar el nº de pasos reinicia las marcas y así el
+     reinicio se ve donde ocurre. */
+  .scan-cfg{display:flex;flex-wrap:wrap;align-items:center;gap:8px 22px;
+    padding-bottom:12px;margin:10px 0 14px;border-bottom:1px solid var(--line)}
+  .cfg-item{display:flex;align-items:center;gap:8px}
+  .scan-cfg label{margin:0}
+  .scan-cfg select{width:auto}
+  /* resultados: descargas primero, pegadas a las gráficas de comprobación */
+  .res-h{font-size:15px}
+  /* dos descargas lado a lado (son alternativas: una por programa), cada una
+     con su instrucción debajo; en pantallas estrechas se apilan solas */
+  .dl-grid{display:flex;flex-wrap:wrap;gap:12px 16px;margin-top:10px}
+  .dl-item{flex:1 1 260px;display:flex;flex-direction:column;gap:6px}
+  .dl-grid button.act{margin-top:0;padding:11px 18px}
+  .dl-grid span{font-size:13px;color:var(--ink-soft)}
+  .dl-note{font-size:13px;color:var(--ink-soft);margin:12px 0 0}
+  .check-hint{font-size:13px;color:var(--ink-soft);margin:2px 0 12px}
+  .stage-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+  .stage-tools{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-left:auto}
+  .stage-tools button{padding:7px 12px;border-radius:3px;cursor:pointer;
+    font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
   .pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:3px 9px;border-radius:20px;
     background:var(--paper-edge);color:var(--prussia-deep);margin-right:6px}
   .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--ink-soft);margin-top:10px}
@@ -163,13 +220,13 @@
 </head>
 <body>
 <header style="position:relative">
-  <div id="langSwitch" style="position:absolute;top:18px;right:28px;font-family:var(--mono);font-size:12px"></div>
-  <p class="eyebrow" data-i18n="eyebrow">Cianotipia · calibración de proceso</p>
+  <div class="topline">
+    <p class="eyebrow" data-i18n="eyebrow">Cianotipia · calibración de proceso</p>
+    <div id="langSwitch"></div>
+  </div>
   <p class="brand">CyanoLUT</p>
   <h1 data-i18n="title">Cuña escalonada y curva de corrección</h1>
-  <p class="sub" data-i18n="subtitle">Genera una cuña escalonada de densidades equiespaciadas para imprimir, expón tu
-  cianotipia, y al escanearla obtén la curva característica del proceso y su corrección inversa
-  lista para Affinity, Photoshop o como tabla.</p>
+  <p class="sub" data-i18n="subtitle">Consigue cianotipias con una gradación más pareja y más detalle en las sombras. Imprime una cuña, mide cómo responde tu proceso y obtén la curva que corrige tus negativos digitales, lista para Affinity o Photoshop.</p>
 </header>
 
 <nav>
@@ -201,9 +258,8 @@
       </div>
       <p class="hint" style="margin:6px 0 0" data-i18n="g_sacrhint">Barra negra superior que absorbe el sobredepósito de tóner del borde de entrada al fusor. Útil en impresoras láser. En inkjet no hace falta (no hay fusor) y puedes desactivarla.</p>
 
-      <button class="act" id="g_render" data-i18n="g_render">Generar previsualización</button>
       <div class="btn-stack">
-        <button class="ghost" id="g_pdf" data-i18n="g_pdf">Descargar PDF para imprimir</button>
+        <button class="act" id="g_pdf" data-i18n="g_pdf">Descargar PDF para imprimir</button>
         <button class="ghost" id="g_png" data-i18n="g_png">Descargar PNG</button>
       </div>
     </div>
@@ -232,36 +288,15 @@
   <div class="grid">
     <div class="controls">
       <h2 data-i18n="a_meas">Medición</h2>
-      <p class="hint" data-i18n="a_load">Carga el escaneo de la cianotipia seca.</p>
-
-      <label data-i18n="a_steps_lbl">Número de pasos</label>
-      <select id="a_steps">
-        <option value="21" selected data-i18n="steps_21">21 pasos</option>
-        <option value="31" data-i18n="steps_31">31 pasos</option>
-      </select>
-
-      <label data-i18n="a_channel_lbl">Canal a medir</label>
-      <select id="a_channel">
-        <option value="r" selected data-i18n="ch_r">Rojo</option>
-        <option value="lum" data-i18n="ch_lum">Luminosidad</option>
-        <option value="g" data-i18n="ch_g">Verde</option>
-        <option value="b" data-i18n="ch_b">Azul</option>
-      </select>
-
-      <p class="hint" id="a_gridinfo" style="margin:16px 0 0">—</p>
+      <p class="hint" data-i18n="a_load">Marcado y ajustes de la curva.</p>
 
       <div class="note" style="margin-top:14px" data-i18n="a_marknote">
-        Por <strong>cada columna</strong> marca dos puntos: centro del <b>primer paso</b> (arriba)
-        y centro del <b>último paso</b> (abajo). El resto de la columna se interpola. Recorre las
-        columnas de izquierda a derecha, igual que la numeración impresa.
+        <strong>Dos clics por columna:</strong> centro del primer paso y centro del último; el resto se interpola. La indicación sobre el escaneo te dice qué paso toca.
       </div>
 
       <label><span data-i18n="a_winlbl_lbl">Tamaño de la ventana de medición:</span> <span id="a_winlbl" class="val">60%</span></label>
       <input type="range" id="a_win" min="20" max="90" value="60" style="width:100%;padding:0">
       <p class="hint" style="margin:6px 0 0" data-i18n="a_winhint">% del paso que se promedia (mediana), centrado. Verás el recuadro sobre cada paso al marcar. Menor = más central y seguro; mayor = promedia más píxeles.</p>
-
-      <button class="act" id="a_measure" disabled data-i18n="a_measbtn">Medir pasos</button>
-      <button class="ghost" id="a_reset" style="margin-top:9px;width:100%" data-i18n="a_reset">Reiniciar marcas</button>
 
       <div class="radio-set" style="margin-top:16px">
         <label><input type="checkbox" id="a_smooth" checked> <span data-i18n="a_smooth">Homogeneizar curva (recomendado)</span></label>
@@ -269,26 +304,61 @@
         <label><input type="checkbox" id="a_invert"> <span data-i18n="a_invert">Invertir sentido de la corrección</span></label>
       </div>
       <p class="hint" style="margin:6px 0 0" data-i18n="a_smoothhint">Homogeneizar fuerza una curva monótona y suave (PAVA + PCHIP). El prefiltro promedia ligeramente cada paso con sus vecinos antes de homogeneizar; úsalo solo si ves ruido residual, respeta los extremos.</p>
-      <div class="btn-stack">
-        <button class="ghost" id="a_cube" disabled data-i18n="a_cube">Exportar .cube — Affinity (LUT)</button>
-        <button class="ghost" id="a_acv" disabled data-i18n="a_acv">Exportar .acv — solo Photoshop</button>
-        <button class="ghost" id="a_csv" disabled data-i18n="a_csv">Exportar tabla .csv</button>
-      </div>
     </div>
 
     <div class="viz">
       <h2 data-i18n="a_scanmeas">Escaneo y medición</h2>
+      <div class="scan-cfg">
+        <div class="cfg-item">
+          <label for="a_steps" data-i18n="a_steps_lbl">Número de pasos</label>
+          <select id="a_steps">
+            <option value="21" selected data-i18n="steps_21">21 pasos</option>
+            <option value="31" data-i18n="steps_31">31 pasos</option>
+          </select>
+        </div>
+        <div class="cfg-item">
+          <label for="a_channel" data-i18n="a_channel_lbl">Canal a medir</label>
+          <select id="a_channel">
+            <option value="r" selected data-i18n="ch_r">Rojo (cianotipia)</option>
+            <option value="lum" data-i18n="ch_lum">Luminosidad</option>
+            <option value="g" data-i18n="ch_g">Verde</option>
+            <option value="b" data-i18n="ch_b">Azul</option>
+          </select>
+        </div>
+      </div>
       <div class="drop" id="dropZone" data-i18n="a_drop">
-        Arrastra aquí el escaneo, o pulsa para elegir archivo
+        Arrastra aquí el escaneo (PNG o JPG), o pulsa para elegir archivo
         <input type="file" id="fileInput" accept="image/*" hidden>
       </div>
 
       <div class="stage" id="stage">
-        <p class="stage-hint" id="clickHint" data-i18n="clickStep0">Pulsa el centro del <b>paso 0</b>.</p>
+        <div class="stage-bar">
+          <p class="stage-hint" id="clickHint" data-i18n="clickStep0">Pulsa el centro del <b>paso 0</b>.</p>
+          <div class="stage-tools">
+            <button class="ghost" id="a_changescan" data-i18n="a_changescan">Cambiar escaneo</button>
+            <button class="ghost" id="a_reset" data-i18n="a_reset">Reiniciar marcas</button>
+          </div>
+        </div>
         <canvas id="scanCanvas"></canvas>
+        <button class="act" id="a_measure" disabled data-i18n="a_measbtn">Medir pasos</button>
       </div>
 
       <div id="results" style="margin-top:20px;display:none">
+        <h2 class="res-h" data-i18n="a_dlhead">Descarga tu curva</h2>
+        <div class="dl-grid">
+          <div class="dl-item">
+            <button class="act" id="a_cube" disabled data-i18n="a_cube">Descargar .cube (Affinity)</button>
+            <span data-i18n="a_howcube">Capa de ajuste → LUT → Cargar.</span>
+          </div>
+          <div class="dl-item">
+            <button class="act" id="a_acv" disabled data-i18n="a_acv">Descargar .acv (Photoshop)</button>
+            <span data-i18n="a_howacv">Curvas → menú → Cargar preajuste.</span>
+          </div>
+        </div>
+        <p class="dl-note" data-i18n="a_howcommon">Aplícala sobre el <b>negativo</b> (la imagen ya invertida que vas a imprimir), no sobre el positivo, y en <b>escala de grises</b>: en RGB la curva puede amplificar tintes de color. Luego imprime el negativo corregido y expón.</p>
+
+        <h2 class="res-h" style="margin-top:26px" data-i18n="a_checkhead">Comprueba la curva</h2>
+        <p class="check-hint" data-i18n="a_checkhint">Si algún punto se sale claramente de la curva (una mancha, un defecto de impresión), haz clic en él para descartarlo y vuelve a descargar.</p>
         <div class="two-col">
           <div>
             <h2 style="font-size:15px" data-i18n="a_resp">Respuesta medida del proceso</h2>
@@ -303,7 +373,7 @@
             <button class="ghost" id="a_discardclear" style="margin-top:8px;width:100%;display:none" data-i18n="a_discardclear">Restaurar puntos descartados</button>
           </div>
           <div>
-            <h2 style="font-size:15px" data-i18n="a_corr">Corrección del negativo</h2>
+            <h2 style="font-size:15px" data-i18n="a_corr">Curva de corrección (se aplica al negativo)</h2>
             <canvas id="corrCanvas" width="380" height="300"></canvas>
             <p class="hint" style="margin:6px 0 0" data-i18n="a_corrhint">Cómo se remapea cada valor del negativo antes de imprimirlo. Esto es exactamente lo que aplican el .cube y el .acv. La diagonal punteada sería "sin corrección".</p>
             <div class="legend">
@@ -318,14 +388,7 @@
           <div style="max-height:240px;overflow:auto">
             <table id="dataTable"></table>
           </div>
-          <div class="note" style="margin-top:14px" data-i18n="a_applynote">
-            <strong>Cómo aplicar la corrección:</strong> ábrela sobre tu <b>negativo</b> (la imagen
-            ya invertida que vas a imprimir en acetato), no sobre el positivo. Affinity: Capa de
-            ajuste → LUT → Cargar el <b>.cube</b>. Photoshop: Curvas → menú → Cargar preajuste el
-            <b>.acv</b>. Luego imprime el negativo corregido y expón.
-            <br><br><strong>LUT (.cube):</strong> aplícalo sobre el negativo en <b>escala de grises</b>;
-            en RGB la curva puede amplificar tintes de color.
-          </div>
+          <button class="ghost" id="a_csv" disabled style="margin-top:10px" data-i18n="a_csv">Descargar tabla .csv</button>
         </div>
       </div>
     </div>
@@ -333,12 +396,12 @@
 </section>
 </main>
 
-<footer data-i18n="footer">Funcionamiento en modo local · curva exportable a .acv / .csv / .cube · © 2026 Alberto Areta Martinez de Marañón — licencia MIT</footer>
+<footer data-i18n="footer">Funcionamiento en modo local · curva exportable a .acv / .csv / .cube · © 2026 Alberto Areta — licencia MIT</footer>
 
 <script>
 /* =====================================================
    Cianotipia · Calibración
-   © 2026 Alberto Areta Martinez de Marañón — Licenciado bajo MIT
+   © 2026 Alberto Areta — Licenciado bajo MIT
    https://github.com/[PENDIENTE]
 ===================================================== */
 
@@ -351,7 +414,7 @@ const I18N={
   word_steps:"pasos", word_linear:"lineal",
   eyebrow:"Cianotipia · calibración de proceso",
   title:"Cuña escalonada y curva de corrección",
-  subtitle:"Genera una cuña escalonada de densidades equiespaciadas para imprimir, expón tu cianotipia, y al escanearla obtén la curva característica del proceso y su corrección inversa lista para Affinity, Photoshop o como tabla.",
+  subtitle:"Consigue cianotipias con una gradación más pareja y más detalle en las sombras. Imprime una cuña, mide cómo responde tu proceso y obtén la curva que corrige tus negativos digitales, lista para Affinity o Photoshop.",
   tab_gen:"01 · Generar cuña", tab_ana:"02 · Analizar y curva",
   g_params:"Parámetros",
   g_hint:"Cuña escalonada para medir la respuesta de tu cianotipia. Se imprime como negativo en acetato; multicolumna que llena el A4.",
@@ -360,49 +423,51 @@ const I18N={
   g_neg:"Negativo para acetato (recomendado)", g_nums:"Numerar pasos",
   g_sacr:"Banda de sacrificio (láser)",
   g_sacrhint:"Barra negra superior que absorbe el sobredepósito de tóner del borde de entrada al fusor. Útil en impresoras láser. En inkjet no hace falta (no hay fusor) y puedes desactivarla.",
-  g_render:"Generar previsualización", g_pdf:"Descargar PDF para imprimir", g_png:"Descargar PNG",
+  g_pdf:"Descargar PDF para imprimir", g_png:"Descargar PNG",
   g_preview:"Previsualización",
   g_note:"<strong>Antes de medir:</strong> seca la copia por completo y espera ≥24 h — el azul de Prusia intensifica por oxidación tras el lavado. Apaga toda corrección automática del escáner. Mide el <em>canal rojo</em>, donde el azul de Prusia tiene mayor rango tonal.",
   g_summary:"Valores de entrada de cada paso",
-  a_meas:"Medición", a_load:"Carga el escaneo de la cianotipia seca.",
+  a_meas:"Medición", a_load:"Marcado y ajustes de la curva.",
   a_steps_lbl:"Número de pasos",
   a_channel_lbl:"Canal a medir",
   ch_lum:"Luminosidad",
-  ch_r:"Rojo",
+  ch_r:"Rojo (cianotipia)",
   ch_g:"Verde",
   ch_b:"Azul",
-  a_marknote:"Por <strong>cada columna</strong> marca dos puntos: centro del <b>primer paso</b> (arriba) y centro del <b>último paso</b> (abajo). El resto de la columna se interpola. Recorre las columnas de izquierda a derecha, igual que la numeración impresa.",
+  a_marknote:"<strong>Dos clics por columna:</strong> centro del primer paso y centro del último; el resto se interpola. La indicación sobre el escaneo te dice qué paso toca.",
   a_winlbl_lbl:"Tamaño de la ventana de medición:",
   a_winhint:"% del paso que se promedia (mediana), centrado. Verás el recuadro sobre cada paso al marcar. Menor = más central y seguro; mayor = promedia más píxeles.",
-  a_measbtn:"Medir pasos", a_reset:"Reiniciar marcas",
+  a_measbtn:"Medir pasos", a_reset:"Reiniciar marcas", a_changescan:"Cambiar escaneo",
   a_smooth:"Homogeneizar curva (recomendado)",
   a_prefilter:"Prefiltro suave (reduce ruido)",
   a_invert:"Invertir sentido de la corrección",
   a_smoothhint:"Homogeneizar fuerza una curva monótona y suave (PAVA + PCHIP). El prefiltro promedia ligeramente cada paso con sus vecinos antes de homogeneizar; úsalo solo si ves ruido residual, respeta los extremos.",
   a_discardhint:"Haz clic en un punto para <b>descartarlo</b> (excluirlo por artefacto conocido); se reconstruye interpolando entre vecinos sanos. Clic de nuevo para restaurarlo.",
   a_discardclear:"Restaurar puntos descartados",
-  a_cube:"Exportar .cube — Affinity (LUT)", a_acv:"Exportar .acv — solo Photoshop", a_csv:"Exportar tabla .csv",
+  a_cube:"Descargar .cube (Affinity)", a_acv:"Descargar .acv (Photoshop)", a_csv:"Descargar tabla .csv",
+  a_dlhead:"Descarga tu curva", a_howcube:"Capa de ajuste → LUT → Cargar.", a_howacv:"Curvas → menú → Cargar preajuste.",
+  a_howcommon:"Aplícala sobre el <b>negativo</b> (la imagen ya invertida que vas a imprimir), no sobre el positivo, y en <b>escala de grises</b>: en RGB la curva puede amplificar tintes de color. Luego imprime el negativo corregido y expón.",
+  a_checkhead:"Comprueba la curva", a_checkhint:"Si algún punto se sale claramente de la curva (una mancha, un defecto de impresión), haz clic en él para descartarlo y vuelve a descargar.",
   a_scanmeas:"Escaneo y medición",
-  a_drop:"Arrastra aquí el escaneo, o pulsa para elegir archivo",
+  a_drop:"Arrastra aquí el escaneo (PNG o JPG), o pulsa para elegir archivo",
+  a_loaderr:"No se pudo abrir la imagen. Si es un TIFF, conviértelo a PNG: este navegador no lee TIFF.",
   a_resp:"Respuesta medida del proceso",
   a_resphint:"Densidad real en la cianotipia según el valor del negativo. La diagonal punteada es la respuesta ideal lineal: cuanto más se aleja tu curva, más corrección hace falta.",
   axis_gray:"gris del negativo: opaco → transparente",
   axis_density:"densidad en cianotipia ↑",
   lg_curve:"Curva (homogeneizada si está activa)", lg_raw:"Cruda", lg_ideal:"Ideal lineal",
-  a_corr:"Corrección del negativo",
+  a_corr:"Curva de corrección (se aplica al negativo)",
   a_corrhint:"Cómo se remapea cada valor del negativo antes de imprimirlo. Esto es exactamente lo que aplican el .cube y el .acv. La diagonal punteada sería \"sin corrección\".",
   axis_neg_orig:"valor original del negativo →",
   axis_neg_corr:"valor corregido ↑",
   lg_corr:"Corrección", lg_nocorr:"Sin corregir",
   a_databystep:"Datos por paso",
-  a_applynote:"<strong>Cómo aplicar la corrección:</strong> ábrela sobre tu <b>negativo</b> (la imagen ya invertida que vas a imprimir en acetato), no sobre el positivo. Affinity: Capa de ajuste → LUT → Cargar el <b>.cube</b>. Photoshop: Curvas → menú → Cargar preajuste el <b>.acv</b>. Luego imprime el negativo corregido y expón.<br><br><strong>LUT (.cube):</strong> aplícalo sobre el negativo en <b>escala de grises</b>; en RGB la curva puede amplificar tintes de color.",
-  footer:"Funcionamiento en modo local · curva exportable a .acv / .csv / .cube · © 2026 Alberto Areta Martinez de Marañón — licencia MIT",
+  footer:"Funcionamiento en modo local · curva exportable a .acv / .csv / .cube · © 2026 Alberto Areta — licencia MIT",
   // dinámicos JS
   clickStep0:"Pulsa el centro del <b>paso 0</b>.",
-  gridinfo:(t,c,r)=>`Cuña fija: ${t} pasos · ${c} columnas × ${r} filas. Marca ${c} columnas.`,
   allmarked:"Todas las columnas marcadas. Pulsa <b>Medir pasos</b>.",
-  colFirst:(d,c,np)=>`Columna ${d+1}/${c} (${np} pasos): pulsa el <b>primer paso</b> (arriba).`,
-  colLast:(d,c)=>`Columna ${d+1}/${c}: pulsa el <b>último paso</b> (abajo).`,
+  colFirst:(d,c,s)=>`Columna ${d+1}/${c}: haz clic en el centro del <b>paso ${s}</b> (arriba).`,
+  colLast:(d,c,s)=>`Columna ${d+1}/${c}: haz clic en el centro del <b>paso ${s}</b> (abajo).`,
   metaGen:(n,c,r,pw,ph,neg)=>`${n} pasos · ${c} columnas × ${r} filas · paso ${pw}×${ph} mm · centrado · lineal · ${neg?'negativo':'positivo'}`,
   tbl_step:"paso", tbl_col:"col", tbl_mean:"media", tbl_refl:"refl%", tbl_D:"D rel",
   pdfSub:"Cianotipia · imprimir a tamaño real (sin ajuste de escala). Secar 24 h antes de medir.",
@@ -414,7 +479,7 @@ const I18N={
   word_steps:"steps", word_linear:"linear",
   eyebrow:"Cyanotype · process calibration",
   title:"Step wedge and correction curve",
-  subtitle:"Generate an evenly-spaced density step wedge to print, expose your cyanotype, and on scanning it get the process response curve and its inverse correction ready for Affinity, Photoshop or as a table.",
+  subtitle:"Get cyanotypes with smoother tonal gradation and more shadow detail. Print a step wedge, measure how your process responds, and get the curve that corrects your digital negatives, ready for Affinity or Photoshop.",
   tab_gen:"01 · Generate wedge", tab_ana:"02 · Analyze & curve",
   g_params:"Parameters",
   g_hint:"Step wedge to measure your cyanotype's response. Printed as a negative on acetate; multi-column filling the A4.",
@@ -423,48 +488,50 @@ const I18N={
   g_neg:"Negative for acetate (recommended)", g_nums:"Number the steps",
   g_sacr:"Sacrificial band (laser)",
   g_sacrhint:"Top black bar that absorbs the toner over-deposition at the fuser's leading edge. Useful on laser printers. On inkjet it isn't needed (no fuser) and can be turned off.",
-  g_render:"Generate preview", g_pdf:"Download PDF to print", g_png:"Download PNG",
+  g_pdf:"Download PDF to print", g_png:"Download PNG",
   g_preview:"Preview",
   g_note:"<strong>Before measuring:</strong> dry the print fully and wait ≥24 h — Prussian blue intensifies through oxidation after washing. Turn off all automatic scanner correction. Measure the <em>red channel</em>, where Prussian blue has the greatest tonal range.",
   g_summary:"Input value of each step",
-  a_meas:"Measurement", a_load:"Load the scan of the dry cyanotype.",
+  a_meas:"Measurement", a_load:"Marking and curve settings.",
   a_steps_lbl:"Number of steps",
   a_channel_lbl:"Channel to measure",
   ch_lum:"Luminosity",
-  ch_r:"Red",
+  ch_r:"Red (cyanotype)",
   ch_g:"Green",
   ch_b:"Blue",
-  a_marknote:"For <strong>each column</strong> mark two points: centre of the <b>first step</b> (top) and centre of the <b>last step</b> (bottom). The rest of the column is interpolated. Go through the columns left to right, matching the printed numbering.",
+  a_marknote:"<strong>Two clicks per column:</strong> centre of the first step and centre of the last; the rest is interpolated. The prompt above the scan tells you which step is next.",
   a_winlbl_lbl:"Measurement window size:",
   a_winhint:"% of the step that is averaged (median), centred. You'll see the box over each step as you mark. Smaller = more central and safe; larger = averages more pixels.",
-  a_measbtn:"Measure steps", a_reset:"Reset marks",
+  a_measbtn:"Measure steps", a_reset:"Reset marks", a_changescan:"Change scan",
   a_smooth:"Homogenize curve (recommended)",
   a_prefilter:"Light pre-filter (reduces noise)",
   a_invert:"Invert correction direction",
   a_smoothhint:"Homogenize forces a monotonic, smooth curve (PAVA + PCHIP). The pre-filter lightly averages each step with its neighbours before homogenizing; use it only if you see residual noise, it preserves the endpoints.",
   a_discardhint:"Click a point to <b>discard</b> it (exclude it as a known artefact); it is reconstructed by interpolating between healthy neighbours. Click again to restore it.",
   a_discardclear:"Restore discarded points",
-  a_cube:"Export .cube — Affinity (LUT)", a_acv:"Export .acv — Photoshop only", a_csv:"Export .csv table",
+  a_cube:"Download .cube (Affinity)", a_acv:"Download .acv (Photoshop)", a_csv:"Download .csv table",
+  a_dlhead:"Download your curve", a_howcube:"Adjustment layer → LUT → Load.", a_howacv:"Curves → menu → Load preset.",
+  a_howcommon:"Apply it to the <b>negative</b> (the already-inverted image you'll print), not the positive, and in <b>grayscale</b>: in RGB the curve may amplify color casts. Then print the corrected negative and expose.",
+  a_checkhead:"Check the curve", a_checkhint:"If a point clearly strays from the curve (a stain, a printing defect), click it to discard it and download again.",
   a_scanmeas:"Scan & measurement",
-  a_drop:"Drag the scan here, or click to choose a file",
+  a_drop:"Drag the scan here (PNG or JPG), or click to choose a file",
+  a_loaderr:"The image could not be opened. If it is a TIFF, convert it to PNG: this browser cannot read TIFF.",
   a_resp:"Measured process response",
   a_resphint:"Actual density in the cyanotype vs the negative value. The dashed diagonal is the ideal linear response: the further your curve strays, the more correction is needed.",
   axis_gray:"negative gray: opaque → transparent",
   axis_density:"density in cyanotype ↑",
   lg_curve:"Curve (homogenized if active)", lg_raw:"Raw", lg_ideal:"Linear ideal",
-  a_corr:"Negative correction",
+  a_corr:"Correction curve (applied to the negative)",
   a_corrhint:"How each negative value is remapped before printing. This is exactly what the .cube and .acv apply. The dashed diagonal would be \"no correction\".",
   axis_neg_orig:"original negative value →",
   axis_neg_corr:"corrected value ↑",
   lg_corr:"Correction", lg_nocorr:"Uncorrected",
   a_databystep:"Data per step",
-  a_applynote:"<strong>How to apply the correction:</strong> open it on your <b>negative</b> (the already-inverted image you'll print on acetate), not on the positive. Affinity: Adjustment layer → LUT → Load the <b>.cube</b>. Photoshop: Curves → menu → Load preset the <b>.acv</b>. Then print the corrected negative and expose.<br><br><strong>LUT (.cube):</strong> apply it to the negative in <b>grayscale</b>; in RGB the curve may amplify color casts.",
-  footer:"Runs entirely locally · curve exportable as .acv / .csv / .cube · © 2026 Alberto Areta Martinez de Marañón — MIT license",
+  footer:"Runs entirely locally · curve exportable as .acv / .csv / .cube · © 2026 Alberto Areta — MIT license",
   clickStep0:"Click the centre of <b>step 0</b>.",
-  gridinfo:(t,c,r)=>`Fixed wedge: ${t} steps · ${c} columns × ${r} rows. Mark ${c} columns.`,
   allmarked:"All columns marked. Press <b>Measure steps</b>.",
-  colFirst:(d,c,np)=>`Column ${d+1}/${c} (${np} steps): click the <b>first step</b> (top).`,
-  colLast:(d,c)=>`Column ${d+1}/${c}: click the <b>last step</b> (bottom).`,
+  colFirst:(d,c,s)=>`Column ${d+1}/${c}: click the centre of <b>step ${s}</b> (top).`,
+  colLast:(d,c,s)=>`Column ${d+1}/${c}: click the centre of <b>step ${s}</b> (bottom).`,
   metaGen:(n,c,r,pw,ph,neg)=>`${n} steps · ${c} columns × ${r} rows · step ${pw}×${ph} mm · centred · linear · ${neg?'negative':'positive'}`,
   tbl_step:"step", tbl_col:"col", tbl_mean:"mean", tbl_refl:"refl%", tbl_D:"D rel",
   pdfSub:"Cyanotype · print at real size (no scaling). Dry 24 h before measuring.",
@@ -476,7 +543,7 @@ const I18N={
   word_steps:"paliers", word_linear:"linéaire",
   eyebrow:"Cyanotype · calibration du procédé",
   title:"Coin sensitométrique et courbe de correction",
-  subtitle:"Générez un coin sensitométrique à densités régulièrement espacées à imprimer, exposez votre cyanotype, et en le numérisant obtenez la courbe de réponse du procédé ainsi que sa correction inverse, prête pour Affinity, Photoshop ou sous forme de tableau.",
+  subtitle:"Obtenez des cyanotypes aux dégradés plus réguliers et avec plus de détail dans les ombres. Imprimez un coin sensitométrique, mesurez la réponse de votre procédé et obtenez la courbe qui corrige vos négatifs numériques, prête pour Affinity ou Photoshop.",
   tab_gen:"01 · Générer le coin", tab_ana:"02 · Analyser et courbe",
   g_params:"Paramètres",
   g_hint:"Coin sensitométrique pour mesurer la réponse de votre cyanotype. Imprimé en négatif sur acétate ; disposition multi-colonnes remplissant l'A4.",
@@ -485,48 +552,50 @@ const I18N={
   g_neg:"Négatif pour acétate (recommandé)", g_nums:"Numéroter les paliers",
   g_sacr:"Bande de sacrifice (laser)",
   g_sacrhint:"Barre noire supérieure qui absorbe le surdépôt de toner du bord d'attaque au niveau du four. Utile sur imprimante laser. En jet d'encre, elle est inutile (pas de four) et peut être désactivée.",
-  g_render:"Générer l'aperçu", g_pdf:"Télécharger le PDF à imprimer", g_png:"Télécharger le PNG",
+  g_pdf:"Télécharger le PDF à imprimer", g_png:"Télécharger le PNG",
   g_preview:"Aperçu",
   g_note:"<strong>Avant de mesurer :</strong> laissez sécher la copie complètement et attendez ≥24 h — le bleu de Prusse s'intensifie par oxydation après le lavage. Désactivez toute correction automatique du scanner. Mesurez le <em>canal rouge</em>, où le bleu de Prusse offre la plus grande plage tonale.",
   g_summary:"Valeurs d'entrée de chaque palier",
-  a_meas:"Mesure", a_load:"Chargez le scan du cyanotype sec.",
+  a_meas:"Mesure", a_load:"Marquage et réglages de la courbe.",
   a_steps_lbl:"Nombre de paliers",
   a_channel_lbl:"Canal à mesurer",
   ch_lum:"Luminosité",
-  ch_r:"Rouge",
+  ch_r:"Rouge (cyanotype)",
   ch_g:"Vert",
   ch_b:"Bleu",
-  a_marknote:"Pour <strong>chaque colonne</strong>, marquez deux points : centre du <b>premier palier</b> (en haut) et centre du <b>dernier palier</b> (en bas). Le reste de la colonne est interpolé. Parcourez les colonnes de gauche à droite, comme la numérotation imprimée.",
+  a_marknote:"<strong>Deux clics par colonne :</strong> centre du premier palier et centre du dernier ; le reste est interpolé. L'indication au-dessus du scan vous dit quel palier marquer.",
   a_winlbl_lbl:"Taille de la fenêtre de mesure :",
   a_winhint:"% du palier moyenné (médiane), centré. Vous verrez le cadre sur chaque palier en marquant. Plus petit = plus central et sûr ; plus grand = moyenne davantage de pixels.",
-  a_measbtn:"Mesurer les paliers", a_reset:"Réinitialiser les marques",
+  a_measbtn:"Mesurer les paliers", a_reset:"Réinitialiser les marques", a_changescan:"Changer de scan",
   a_smooth:"Homogénéiser la courbe (recommandé)",
   a_prefilter:"Préfiltre léger (réduit le bruit)",
   a_invert:"Inverser le sens de la correction",
   a_smoothhint:"L'homogénéisation impose une courbe monotone et lisse (PAVA + PCHIP). Le préfiltre moyenne légèrement chaque palier avec ses voisins avant l'homogénéisation ; à utiliser seulement si vous constatez du bruit résiduel, il préserve les extrémités.",
   a_discardhint:"Cliquez sur un point pour l'<b>écarter</b> (l'exclure comme artefact connu) ; il est reconstruit par interpolation entre voisins sains. Recliquez pour le rétablir.",
   a_discardclear:"Rétablir les points écartés",
-  a_cube:"Exporter .cube — Affinity (LUT)", a_acv:"Exporter .acv — Photoshop uniquement", a_csv:"Exporter le tableau .csv",
+  a_cube:"Télécharger .cube (Affinity)", a_acv:"Télécharger .acv (Photoshop)", a_csv:"Télécharger le tableau .csv",
+  a_dlhead:"Téléchargez votre courbe", a_howcube:"Calque de réglage → LUT → Charger.", a_howacv:"Courbes → menu → Charger le préréglage.",
+  a_howcommon:"Appliquez-la au <b>négatif</b> (l'image déjà inversée que vous allez imprimer), pas au positif, et en <b>niveaux de gris</b> : en RVB la courbe peut amplifier les dominantes de couleur. Imprimez ensuite le négatif corrigé et exposez.",
+  a_checkhead:"Vérifiez la courbe", a_checkhint:"Si un point s'écarte nettement de la courbe (une tache, un défaut d'impression), cliquez dessus pour l'écarter et téléchargez à nouveau.",
   a_scanmeas:"Scan et mesure",
-  a_drop:"Glissez le scan ici, ou cliquez pour choisir un fichier",
+  a_drop:"Glissez le scan ici (PNG ou JPG), ou cliquez pour choisir un fichier",
+  a_loaderr:"Impossible d'ouvrir l'image. S'il s'agit d'un TIFF, convertissez-le en PNG : ce navigateur ne lit pas le TIFF.",
   a_resp:"Réponse mesurée du procédé",
   a_resphint:"Densité réelle du cyanotype en fonction de la valeur du négatif. La diagonale en pointillés est la réponse linéaire idéale : plus votre courbe s'en éloigne, plus la correction nécessaire est importante.",
   axis_gray:"gris du négatif : opaque → transparent",
   axis_density:"densité du cyanotype ↑",
   lg_curve:"Courbe (homogénéisée si activée)", lg_raw:"Brute", lg_ideal:"Idéale linéaire",
-  a_corr:"Correction du négatif",
+  a_corr:"Courbe de correction (appliquée au négatif)",
   a_corrhint:"Comment chaque valeur du négatif est remappée avant impression. C'est exactement ce qu'appliquent le .cube et le .acv. La diagonale en pointillés représenterait « sans correction ».",
   axis_neg_orig:"valeur originale du négatif →",
   axis_neg_corr:"valeur corrigée ↑",
   lg_corr:"Correction", lg_nocorr:"Non corrigé",
   a_databystep:"Données par palier",
-  a_applynote:"<strong>Comment appliquer la correction :</strong> ouvrez-la sur votre <b>négatif</b> (l'image déjà inversée que vous allez imprimer sur acétate), pas sur le positif. Affinity : Calque de réglage → LUT → Charger le <b>.cube</b>. Photoshop : Courbes → menu → Charger le préréglage <b>.acv</b>. Puis imprimez le négatif corrigé et exposez.<br><br><strong>LUT (.cube) :</strong> appliquez-la au négatif en <b>niveaux de gris</b> ; en RVB la courbe peut amplifier les dominantes de couleur.",
-  footer:"Fonctionne entièrement en local · courbe exportable en .acv / .csv / .cube · © 2026 Alberto Areta Martinez de Marañón — licence MIT",
+  footer:"Fonctionne entièrement en local · courbe exportable en .acv / .csv / .cube · © 2026 Alberto Areta — licence MIT",
   clickStep0:"Cliquez au centre du <b>palier 0</b>.",
-  gridinfo:(t,c,r)=>`Coin fixe : ${t} paliers · ${c} colonnes × ${r} lignes. Marquez ${c} colonnes.`,
   allmarked:"Toutes les colonnes sont marquées. Appuyez sur <b>Mesurer les paliers</b>.",
-  colFirst:(d,c,np)=>`Colonne ${d+1}/${c} (${np} paliers) : cliquez le <b>premier palier</b> (en haut).`,
-  colLast:(d,c)=>`Colonne ${d+1}/${c} : cliquez le <b>dernier palier</b> (en bas).`,
+  colFirst:(d,c,s)=>`Colonne ${d+1}/${c} : cliquez au centre du <b>palier ${s}</b> (en haut).`,
+  colLast:(d,c,s)=>`Colonne ${d+1}/${c} : cliquez au centre du <b>palier ${s}</b> (en bas).`,
   metaGen:(n,c,r,pw,ph,neg)=>`${n} paliers · ${c} colonnes × ${r} lignes · palier ${pw}×${ph} mm · centré · linéaire · ${neg?'négatif':'positif'}`,
   tbl_step:"palier", tbl_col:"col", tbl_mean:"moy.", tbl_refl:"réfl%", tbl_D:"D rel",
   pdfSub:"Cyanotype · imprimer à taille réelle (sans mise à l'échelle). Sécher 24 h avant de mesurer.",
@@ -538,7 +607,7 @@ const I18N={
   word_steps:"maila", word_linear:"lineala",
   eyebrow:"Zianotipia · prozesuaren kalibrazioa",
   title:"Maila-kuina eta zuzenketa-kurba",
-  subtitle:"Sortu inprimatzeko dentsitate-tarte berdinetako maila-kuina bat, esposatu zure zianotipa, eta eskaneatzean prozesuaren erantzun-kurba eta bere alderantzizko zuzenketa lortuko dituzu; Affinity, Photoshop edo taula formatuan erabiltzeko prest.",
+  subtitle:"Lortu tonu-gradazio berdinagoa eta itzaletan xehetasun gehiago dituzten zianotipiak. Inprimatu maila-kuina bat, neurtu zure prozesuak nola erantzuten duen eta lortu zure negatibo digitalak zuzentzen dituen kurba, Affinity edo Photoshopen erabiltzeko prest.",
   tab_gen:"01 · Kuina sortu", tab_ana:"02 · Aztertu eta kurba",
   g_params:"Parametroak",
   g_hint:"Maila-kuina, zure zianotipiaren erantzuna neurtzeko. Azetatoan negatibo gisa inprimatzen da; A4 osoa betetzen duen hainbat zutabeko diseinua",
@@ -547,48 +616,50 @@ const I18N={
   g_neg:"Negatiboa azetatorako (gomendatua)", g_nums:"Zenbakitu mailak",
   g_sacr:"Sakrifizio-banda (laser)",
   g_sacrhint:"Goiko barra beltza, fusorearen sarrera-ertzeko toner gehiegizko-metaketa xurgatzen duena. Laser inprimagailuetan erabilgarria. Inkjet-en ez da beharrezkoa (ez dago fusorerik) eta desaktibatu daiteke.",
-  g_render:"Aurrebista sortu", g_pdf:"PDFa deskargatu inprimatzeko", g_png:"PNGa deskargatu",
+  g_pdf:"PDFa deskargatu inprimatzeko", g_png:"PNGa deskargatu",
   g_preview:"Aurrebista",
   g_note:"<strong>Neurtu aurretik:</strong> lehortu kopia erabat eta itxaron ≥24 h — Prusiar urdina oxidazioz tindatzen da garbitu ondoren. Itzali eskanerraren zuzenketa automatiko guztiak. Neurtu <em>kanal gorria</em>, Prusiar urdinak tarte tonal handiena duen tokia.",
   g_summary:"Maila bakoitzaren sarrera-balioak",
-  a_meas:"Neurketa", a_load:"Kargatu zianotipia lehorraren eskaneoa.",
+  a_meas:"Neurketa", a_load:"Markaketa eta kurbaren ezarpenak.",
   a_steps_lbl:"Maila kopurua",
   a_channel_lbl:"Neurtzeko kanala",
   ch_lum:"Distira",
-  ch_r:"Gorria",
+  ch_r:"Gorria (zianotipia)",
   ch_g:"Berdea",
   ch_b:"Urdina",
-  a_marknote:"<strong>Zutabe bakoitzeko</strong> bi puntu markatu: <b>lehen mailaren</b> erdigunea (goian) eta <b>azken mailaren</b> erdigunea (behean). Zutabearen gainerakoa interpolatu egiten da. Zutabeak ezkerretik eskuinera zeharkatu, inprimatutako zenbakitzearekin bat.",
+  a_marknote:"<strong>Bi klik zutabe bakoitzeko:</strong> lehen mailaren erdigunea eta azkenarena; gainerakoa interpolatu egiten da. Eskaneoaren gaineko oharrak zein maila dagokion esaten dizu.",
   a_winlbl_lbl:"Neurketa-leihoaren tamaina:",
   a_winhint:"Batez bestekotzen den mailaren %a (mediana), zentratua. Lauki bat ikusiko duzu maila bakoitzaren gainean markatzean. Txikiagoa = zentralagoa eta seguruagoa; handiagoa = pixel gehiago batez bestekotzen ditu.",
-  a_measbtn:"Mailak neurtu", a_reset:"Markak berrezarri",
+  a_measbtn:"Mailak neurtu", a_reset:"Markak berrezarri", a_changescan:"Eskaneoa aldatu",
   a_smooth:"Kurba homogeneizatua (gomendatua)",
   a_prefilter:"Aurre-iragazki leuna (zarata murrizten du)",
   a_invert:"Zuzenketaren noranzkoa alderantzikatu",
   a_smoothhint:"Homogeneizatzeak kurba monotono eta leun bat behartzen du (PAVA + PCHIP). Aurre-iragazkiak maila bakoitza bere auzokideekin arinki batez bestekotzen du homogeneizatu aurretik; erabili soilik zarata soberakinik ikusten baduzu, muturrak errespetatzen ditu.",
   a_discardhint:"Egin klik puntu batean <b>baztertzeko</b> (artefaktu ezagun gisa kentzeko); auzoko osasuntsuen artean interpolatuz berreraikitzen da. Egin klik berriz leheneratzeko.",
   a_discardclear:"Leheneratu baztertutako puntuak",
-  a_cube:"Esportatu .cube — Affinity (LUT)", a_acv:"Esportatu .acv — Photoshop soilik", a_csv:"Esportatu .csv taula",
+  a_cube:"Deskargatu .cube (Affinity)", a_acv:"Deskargatu .acv (Photoshop)", a_csv:"Deskargatu .csv taula",
+  a_dlhead:"Deskargatu zure kurba", a_howcube:"Doikuntza-geruza → LUT → Kargatu.", a_howacv:"Kurbak → menua → Kargatu aurrezarpena.",
+  a_howcommon:"Aplikatu <b>negatiboari</b> (inprimatuko duzun jada alderantzikatutako irudiari), ez positiboari, eta <b>gris-eskalan</b>: RGBn kurbak kolore-tindak areagotu ditzake. Ondoren inprimatu negatibo zuzendua eta esposatu.",
+  a_checkhead:"Egiaztatu kurba", a_checkhint:"Puntu bat kurbatik argi eta garbi ateratzen bada (orban bat, inprimatze-akats bat), egin klik gainean baztertzeko eta deskargatu berriro.",
   a_scanmeas:"Eskaneoa eta neurketa",
-  a_drop:"Arrastatu eskaneoa hona, edo sakatu fitxategi bat aukeratzeko",
+  a_drop:"Arrastatu eskaneoa hona (PNG edo JPG), edo sakatu fitxategi bat aukeratzeko",
+  a_loaderr:"Ezin izan da irudia ireki. TIFF bat bada, bihurtu PNGra: nabigatzaile honek ez du TIFF irakurtzen.",
   a_resp:"Prozesuaren erantzun neurtua",
   a_resphint:"Zianotipiaren benetako dentsitatea negatiboaren balioaren araberakoa da. Diagonal puntukatua erantzun linealaren ideala da: zure kurba zenbat eta gehiago aldentzen den, orduan eta zuzenketa gehiago behar da.",
   axis_gray:"negatiboaren grisa: opakua → gardena",
   axis_density:"zianotipiako dentsitatea ↑",
   lg_curve:"Kurba (homogeneizatua aktibo badago)", lg_raw:"Gordina", lg_ideal:"Ideal lineala",
-  a_corr:"Negatiboaren zuzenketa",
+  a_corr:"Zuzenketa-kurba (negatiboari aplikatzen zaio)",
   a_corrhint:"Negatiboaren balio bakoitza nola berregokitzen den inprimatu aurretik. Hau da hain zuzen ere .cube-k eta .acv-k aplikatzen dutena. Diagonal puntukatuak \"zuzenketarik gabe\" adieraziko luke.",
   axis_neg_orig:"negatiboaren jatorrizko balioa →",
   axis_neg_corr:"balio zuzendua ↑",
   lg_corr:"Zuzenketa", lg_nocorr:"Zuzendu gabe",
   a_databystep:"Mailaka datuak",
-  a_applynote:"<strong>Zuzenketa nola aplikatu:</strong> ireki zure <b>negatiboan</b> (azetatoan inprimatuko duzun jada alderantzikatutako irudian), ez positiboan. Affinity: Doikuntza-geruza → LUT → Kargatu <b>.cube</b>. Photoshop: Kurbak → menua → Kargatu aurrezarpena <b>.acv</b>. Ondoren inprimatu negatibo zuzendua eta esposatu.<br><br><strong>LUT (.cube):</strong> aplikatu negatiboari <b>gris-eskalan</b>; RGBn kurbak kolore-tindak areagotu ditzake.",
-  footer:"Modu lokalean funtzionatzen du · kurba .acv / .csv / .cube gisa esportagarria · © 2026 Alberto Areta Martinez de Marañón — MIT lizentzia",
+  footer:"Modu lokalean funtzionatzen du · kurba .acv / .csv / .cube gisa esportagarria · © 2026 Alberto Areta — MIT lizentzia",
   clickStep0:"Sakatu <b>0. mailaren</b> erdigunea.",
-  gridinfo:(t,c,r)=>`Kuina finkoa: ${t} maila · ${c} zutabe × ${r} errenkada. Markatu ${c} zutabe.`,
   allmarked:"Zutabe guztiak markatuta. Sakatu <b>Mailak neurtu</b>.",
-  colFirst:(d,c,np)=>`${d+1}/${c} zutabea (${np} maila): sakatu <b>lehen maila</b> (goian).`,
-  colLast:(d,c)=>`${d+1}/${c} zutabea: sakatu <b>azken maila</b> (behean).`,
+  colFirst:(d,c,s)=>`${d+1}/${c} zutabea: sakatu <b>${s}. mailaren</b> erdigunea (goian).`,
+  colLast:(d,c,s)=>`${d+1}/${c} zutabea: sakatu <b>${s}. mailaren</b> erdigunea (behean).`,
   metaGen:(n,c,r,pw,ph,neg)=>`${n} maila · ${c} zutabe × ${r} errenkada · maila ${pw}×${ph} mm · zentratua · lineala · ${neg?'negatiboa':'positiboa'}`,
   tbl_step:"maila", tbl_col:"zut", tbl_mean:"batez b.", tbl_refl:"isla%", tbl_D:"D erl",
   pdfSub:"Zianotipia · benetako tamainan inprimatu (eskalarik gabe). 24 h lehortu neurtu aurretik.",
@@ -634,7 +705,6 @@ function applyLang(){
   updateLangSwitchStyle();
   // re-render dinámicos si procede
   if(typeof genData!=='undefined' && genData) { try{ renderWedge(); }catch(e){} }
-  if(typeof A_LAYOUT!=='undefined'){ const gi=document.getElementById('a_gridinfo'); if(gi) gi.textContent=t('gridinfo')(A_TOTAL,A_COLS,A_ROWS); }
   if(typeof updateHint==='function') updateHint();
   if(typeof measured!=='undefined' && measured){ try{ drawResults(measured.rows); fillTable(measured.rows);}catch(e){} }
 }
@@ -821,7 +891,13 @@ function renderWedge(){
   document.getElementById('g_table').textContent=
     arr.map(s=>{const p=patchPos(s.idx,L);return `#${String(s.idx).padStart(2)}  col${p.col} fila${p.row}  entrada=${(s.input*100).toFixed(1)}%`;}).join('\n');
 }
-document.getElementById('g_render').onclick=renderWedge;
+// la previsualización se regenera sola al cambiar cualquier control, así lo
+// que se ve es siempre lo que descarga el PDF (antes había que pulsar
+// "Generar previsualización" y el PDF podía salir con la geometría anterior)
+['g_steps','g_neg','g_nums','g_sacr'].forEach(id=>{
+  const el=document.getElementById(id); if(el) el.onchange=renderWedge;
+});
+document.getElementById('g_label').oninput=renderWedge;
 renderWedge();
 
 /* banda de sacrificio: UNA sola barra negra superior, pegada al bloque
@@ -914,6 +990,10 @@ drop.ondragover=e=>{e.preventDefault();drop.classList.add('over')};
 drop.ondragleave=()=>drop.classList.remove('over');
 drop.ondrop=e=>{e.preventDefault();drop.classList.remove('over');loadFile(e.dataTransfer.files[0])};
 fileInput.onchange=e=>loadFile(e.target.files[0]);
+// "Cambiar escaneo": la zona de arrastre se oculta al cargar, así que este
+// botón reabre el selector. Se vacía value para que elegir el MISMO archivo
+// vuelva a disparar onchange (si no, el navegador no lo considera cambio).
+document.getElementById('a_changescan').onclick=()=>{ fileInput.value=''; fileInput.click(); };
 
 function loadFile(f){
   if(!f) return;
@@ -921,12 +1001,23 @@ function loadFile(f){
   r.onload=ev=>{
     img=new Image();
     img.onload=()=>{
-      const maxW=720; imgScale=Math.min(1,maxW/img.width);
+      // ancho máx. 720 px y alto máx. el de la ventana, para marcar el primer y
+      // el último paso de cada columna sin scroll. La medición no cambia: las
+      // coordenadas del canvas se dividen por imgScale al muestrear.
+      const maxW=720, maxH=Math.max(480, window.innerHeight-110);
+      imgScale=Math.min(1, maxW/img.width, maxH/img.height);
       scanCv.width=img.width*imgScale; scanCv.height=img.height*imgScale;
+      // el bloque del escaneo (instrucción, botones, "Medir") mide lo mismo que
+      // el canvas (+2 px del borde), para que los botones no rebasen su borde
+      stage.style.maxWidth=(scanCv.width+2)+'px';
       sctx.drawImage(img,0,0,scanCv.width,scanCv.height);
       stage.classList.add('show');
+      drop.style.display='none';   // ya hay escaneo: se cambia con "Cambiar escaneo"
       resetMarks();
     };
+    // sin esto, un formato que el navegador no decodifica (TIFF en Chrome y
+    // Firefox) fallaba en silencio: ni escaneo ni mensaje
+    img.onerror=()=>{ alert(t('a_loaderr')); };
     img.src=ev.target.result;
   };
   r.readAsDataURL(f);
@@ -969,8 +1060,6 @@ function applyStepsConfig(){
   discarded.clear();
   if(typeof updateDiscardClearBtn==='function') updateDiscardClearBtn();
   if(typeof resetMarks==='function') resetMarks();
-  const gi=document.getElementById('a_gridinfo');
-  if(gi) gi.textContent = t('gridinfo')(A_TOTAL, A_COLS, A_ROWS);
 }
 
 // puntos por columna: pairs = [[start,end], ...] uno por columna
@@ -1000,9 +1089,12 @@ function updateHint(){
   const h=document.getElementById('clickHint');
   if(!h) return;
   if(done>=A_COLS){h.innerHTML=t('allmarked');return;}
-  const np=patchesInCol(done);
-  if(!pending) h.innerHTML=t('colFirst')(done,A_COLS,np);
-  else h.innerHTML=t('colLast')(done,A_COLS);
+  // nº real de paso impreso: la columna c empieza en c×A_ROWS y acaba
+  // patchesInCol(c)−1 pasos después (la última puede ir incompleta: 24–30 con 31)
+  const first=done*A_ROWS;
+  const last=first+patchesInCol(done)-1;
+  if(!pending) h.innerHTML=t('colFirst')(done,A_COLS,first);
+  else h.innerHTML=t('colLast')(done,A_COLS,last);
 }
 
 scanCv.onclick=e=>{

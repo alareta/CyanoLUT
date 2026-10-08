@@ -31,9 +31,8 @@ Ese LUT se aplica a tus futuros negativos, en escala de grises, antes de imprimi
 3. **Expón y revela** exactamente como en producción.
 4. **Seca ≥24 h.** El azul de Prusia sigue intensificando por oxidación.
 5. **Escanea con toda corrección automática desactivada.**
-6. **Carga el escaneo**, selecciona el *mismo* número de pasos que generaste, ajusta la ventana de medición y marca las columnas de izquierda a derecha.
-7. **Revisa la curva** y exporta.
-8. **Aplica el LUT** a un negativo real en escala de grises, imprime, expón. La copia corregida debe repartir el tono mucho mejor.
+6. **Selecciona el *mismo* número de pasos que generaste y carga el escaneo**, ajusta la ventana de medición y marca las columnas de izquierda a derecha — la herramienta te indica qué paso pulsar.
+7. **Aplica el LUT** a un negativo real en escala de grises, imprime, expón. La copia corregida debe repartir el tono mucho mejor.
 
 ---
 
